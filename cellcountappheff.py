@@ -45,36 +45,48 @@ if target_file is not None:
     blurred = cv2.GaussianBlur(gray, (5, 5), 0)
     
     # 3. Direct Thresholding for High-Contrast Bright Objects
-    # Since mammalian cells glow brightly against the grid, we isolate the brightest pixels directly.
-    # 170 is the cutoff threshold. If it misses too much, lower it to 150. If it catches grid intersections, raise it to 185.
-    _, thresh = cv2.threshold(blurred, 170, 255, cv2.THRESH_BINARY)
+    # 165 is slightly lowered to ensure we catch every single cell's glowing center peak
+    _, thresh = cv2.threshold(blurred, 165, 255, cv2.THRESH_BINARY)
     
-    # Clean up minor artifacts and separate slightly touching cell borders
+    # Clean up minor artifacts
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
     cleaned = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel, iterations=1)
-    cleaned = cv2.morphologyEx(cleaned, cv2.MORPH_CLOSE, kernel, iterations=1)
     
-    # 4. Count Contours with Open Constraints
-    contours, _ = cv2.findContours(cleaned, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    # --- WATERSHED SEGMENTATION TO SEPARATE TOUCHING CELLS ---
+    # Compute the distance transform (finds the exact center peaks of overlapping objects)
+    dist_transform = cv2.distanceTransform(cleaned, cv2.DIST_L2, 5)
+    
+    # Threshold the distance image to isolate the absolute core of each individual cell
+    # 0.25 is the sensitivity. Lowering it separates tighter clumps; raising it prevents over-splitting.
+    _, foreground = cv2.threshold(dist_transform, 0.25 * dist_transform.max(), 255, 0)
+    foreground = np.uint8(foreground)
+    
+    # 4. Count the Isolated Peaks (the individual cells)
+    contours, _ = cv2.findContours(foreground, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     
     cell_count = 0
-    # Dropping min area significantly to make sure small or distant glowing spots register
-    MIN_AREA = 15   
-    MAX_AREA = 1000  
+    MIN_AREA = 8   # Lowered because we are tracking the isolated center peaks of the cells
+    MAX_AREA = 800  
     
     for contour in contours:
         area = cv2.contourArea(contour)
-        perimeter = cv2.arcLength(contour, True)
         
         if MIN_AREA < area < MAX_AREA:
-            # Drop circularity check entirely for this test run to maximize total detection
             cell_count += 1
-            (x, y), radius = cv2.minEnclosingCircle(contour)
             
-            # Draw marker
-            cv2.circle(output, (int(x), int(y)), int(radius), (0, 255, 0), 2)
-            cv2.putText(output, str(cell_count), (int(x) - 8, int(y) - 8),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 0, 255), 1)
+            # Find the center of the peak to draw a precise marker
+            M = cv2.moments(contour)
+            if M["m00"] != 0:
+                cX = int(M["m10"] / M["m00"])
+                cY = int(M["m01"] / M["m00"])
+            else:
+                (x_c, y_c), _ = cv2.minEnclosingCircle(contour)
+                cX, cY = int(x_c), int(y_c)
+            
+            # Draw a clean marker dot and a circle over the actual cells
+            cv2.circle(output, (cX, cY), 12, (0, 255, 0), 2)
+            cv2.putText(output, str(cell_count), (cX - 8, cY - 14),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 0, 255), 1)
 
     # 5. Hemacytometer Math Calculation
     # Formula: (Cells / Squares) * Dilution * 10^4
