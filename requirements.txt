@@ -1,5 +1,6 @@
 streamlit
 streamlit-cropper
+streamlit-image-coordinates
 opencv-python-headless
 numpy
 Pillow
