@@ -47,22 +47,27 @@ if target_file is not None:
     gray = cv2.cvtColor(img_resized, cv2.COLOR_BGR2GRAY)
     blurred = cv2.GaussianBlur(gray, (5, 5), 0)
     
-    # 3. Direct Thresholding for Glowing Centers
-    _, thresh = cv2.threshold(blurred, 150, 255, cv2.THRESH_BINARY)
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+   # 3. Direct Thresholding for Glowing Centers
+    # Lowered to 140 to make it much more aggressive at picking up faint/dim cells
+    _, thresh = cv2.threshold(blurred, 140, 255, cv2.THRESH_BINARY)
+    
+    # Slightly larger kernel to handle the newly magnified image scale
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
     cleaned = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel, iterations=1)
     
     # --- WATERSHED CLUSTER-SLICING ---
     dist_transform = cv2.distanceTransform(cleaned, cv2.DIST_L2, 5)
-    _, foreground = cv2.threshold(dist_transform, 0.18 * dist_transform.max(), 255, 0)
+    
+    # Adjusted to 0.22 to cleanly separate the larger magnified cells
+    _, foreground = cv2.threshold(dist_transform, 0.22 * dist_transform.max(), 255, 0)
     foreground = np.uint8(foreground)
     
     # 4. Count the Isolated Peaks inside the cropped region
     contours, _ = cv2.findContours(foreground, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     
     cell_count = 0
-    MIN_AREA = 5   
-    MAX_AREA = 800  
+    MIN_AREA = 15     # Raised slightly to ignore tiny pixel noise artifacts
+    MAX_AREA = 12000   # Raised drastically from 800 to 12,000 to accommodate the magnified cell sizes!
     
     for contour in contours:
         area = cv2.contourArea(contour)
@@ -76,9 +81,10 @@ if target_file is not None:
                 (x_c, y_c), _ = cv2.minEnclosingCircle(contour)
                 cX, cY = int(x_c), int(y_c)
             
-            cv2.circle(output, (cX, cY), 12, (0, 255, 0), 2)
-            cv2.putText(output, str(cell_count), (cX - 8, cY - 14),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 0, 255), 1)
+            # Draw slightly larger markers to match the bigger cell scale
+            cv2.circle(output, (cX, cY), 18, (0, 255, 0), 3)
+            cv2.putText(output, str(cell_count), (cX - 10, cY - 22),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 0, 255), 2)
     
     # --- STEP 5: MANUAL OVERRIDE AND MATHEMATICAL CALCULATION ---
     st.markdown("---")
