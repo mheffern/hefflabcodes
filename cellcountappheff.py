@@ -79,8 +79,33 @@ if target_file is not None:
             cv2.circle(output, (cX, cY), 12, (0, 255, 0), 2)
             cv2.putText(output, str(cell_count), (cX - 8, cY - 14),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 0, 255), 1)
+    
+    # --- STEP 5: MANUAL OVERRIDE AND MATHEMATICAL CALCULATION ---
+    st.markdown("---")
+    st.subheader("📝 Verify and Adjust Count")
+    
+    # This input box defaults to the computer's count, but let's the student change it
+    final_count = st.number_input(
+        "Adjusted Cell Count for this square:",
+        min_value=0,
+        value=int(cell_count),
+        step=1,
+        help="If the green circles missed a cell or counted debris, change this number to fix the math."
+    )
+    
+    # Concentration math updates dynamically based on the student's manual input
+    # Formula: (Adjusted Cells / 1) * Dilution * 10^4
+    concentration = final_count * dilution_factor * 10000
 
-    # 5. Hemacytometer Math Calculation (Always based on 1 square now)
+    # --- STEP 6: DISPLAY FINAL RESULTS ---
+    st.success("Calculations complete!")
+    col1, col2 = st.columns(2)
+    col1.metric(label="Cells Used for Math", value=final_count)
+    col2.metric(label="Final Concentration", value=f"{concentration:,.0f} cells/mL")
+    
+    # Convert back to RGB for web display
+    output_rgb = cv2.cvtColor(output, cv2.COLOR_BGR2RGB)
+    st.image(output_rgb, caption="Counted View of Selected Grid Square", use_column_width=True)# 5. Hemacytometer Math Calculation (Always based on 1 square now)
     # Formula: (Cells / 1) * Dilution * 10^4
     concentration = cell_count * dilution_factor * 10000
 
