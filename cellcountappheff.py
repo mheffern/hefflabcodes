@@ -86,4 +86,5 @@ if target_file is not None:
     col2.metric(label="Calculated Concentration", value=f"{concentration:,.0f} cells/mL")
     
     # Convert BGR back to RGB for web rendering
-    output_rgb = cv2.cvtColor(output, cv2.COLOR
+    output_rgb = cv2.cvtColor(output, cv2.COLOR_BGR2RGB)
+    st.image(output_rgb, caption="Processed Hemacytometer View", use_column_width=True)
