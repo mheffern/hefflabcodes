@@ -45,28 +45,26 @@ if target_file is not None:
     blurred = cv2.GaussianBlur(gray, (5, 5), 0)
     
     # 3. Direct Thresholding for High-Contrast Bright Objects
-    # 165 is slightly lowered to ensure we catch every single cell's glowing center peak
-    _, thresh = cv2.threshold(blurred, 165, 255, cv2.THRESH_BINARY)
+    # Lowered from 165 to 150 to catch dimmer/less reflective cells
+    _, thresh = cv2.threshold(blurred, 150, 255, cv2.THRESH_BINARY)
     
     # Clean up minor artifacts
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
     cleaned = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel, iterations=1)
     
     # --- WATERSHED SEGMENTATION TO SEPARATE TOUCHING CELLS ---
-    # Compute the distance transform (finds the exact center peaks of overlapping objects)
     dist_transform = cv2.distanceTransform(cleaned, cv2.DIST_L2, 5)
     
-    # Threshold the distance image to isolate the absolute core of each individual cell
-    # 0.25 is the sensitivity. Lowering it separates tighter clumps; raising it prevents over-splitting.
-    _, foreground = cv2.threshold(dist_transform, 0.25 * dist_transform.max(), 255, 0)
+    # Lowered the multiplier from 0.25 to 0.18 so smaller/dimmer peaks don't get erased
+    _, foreground = cv2.threshold(dist_transform, 0.18 * dist_transform.max(), 255, 0)
     foreground = np.uint8(foreground)
     
     # 4. Count the Isolated Peaks (the individual cells)
     contours, _ = cv2.findContours(foreground, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     
     cell_count = 0
-    MIN_AREA = 8   # Lowered because we are tracking the isolated center peaks of the cells
-    MAX_AREA = 800  
+    MIN_AREA = 5   # Slightly lowered to protect tiny isolated center points
+    MAX_AREA = 800
     
     for contour in contours:
         area = cv2.contourArea(contour)
