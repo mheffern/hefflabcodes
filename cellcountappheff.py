@@ -44,31 +44,31 @@ if target_file is not None:
     filtered = cv2.addWeighted(gray, 1.0, background, -1.0, 255)
     blurred = cv2.GaussianBlur(filtered, (7, 7), 0)
     
-    # 3. Adaptive Thresholding (Optimized for cell borders)
-    thresh = cv2.adaptiveThreshold(
-        blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
-        cv2.THRESH_BINARY_INV, 15, 4
-    )
+    # 3. Enhanced Thresholding for Bright/Glowing Cells
+    # We switch from standard thresholding to OTSU binarization to catch glowing centers
+    _, thresh = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
     
-    # Clean up internal cell holes and stray noise
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
-    cleaned = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel, iterations=1)
+    # Smooth out the shapes so bright centers and dark rings merge into solid circles
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+    cleaned = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel, iterations=2)
     cleaned = cv2.morphologyEx(cleaned, cv2.MORPH_OPEN, kernel, iterations=1)
     
-    # 4. Count Contours with Mammalian Constraints
+    # 4. Count Contours with Relaxed Constraints for Bright Cells
     contours, _ = cv2.findContours(cleaned, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     
     cell_count = 0
-    MIN_AREA = 80   
-    MAX_AREA = 900  
+    # Widened size ranges to capture both smaller and slightly larger cells/clumps
+    MIN_AREA = 40   
+    MAX_AREA = 1200  
     
     for contour in contours:
         area = cv2.contourArea(contour)
         perimeter = cv2.arcLength(contour, True)
         
         if MIN_AREA < area < MAX_AREA and perimeter > 0:
+            # Relaxed circularity slightly to catch cells that aren't mathematically perfect circles
             circularity = (4 * np.pi * area) / (perimeter ** 2)
-            if circularity > 0.55:
+            if circularity > 0.45:
                 cell_count += 1
                 (x, y), radius = cv2.minEnclosingCircle(contour)
                 cv2.circle(output, (int(x), int(y)), int(radius), (0, 255, 0), 2)
