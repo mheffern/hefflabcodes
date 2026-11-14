@@ -20,3 +20,13 @@ python lcicpms/analyze_lcicpms.py path/to/csv_folder --blank-mode nearest --wind
 
 Outputs go to `csv_folder/results/`: `peak_areas.csv`, `summary_by_type.csv` (mean/SD/CV per type),
 `corrected_traces.csv`, and PNG plots.
+
+## Interactive viewer
+
+`viewer_template.html` is a standalone page: open it in a browser and use **Load CSV files…**
+(select all the exports from one batch at once). Toggles: method, metals, blank subtraction
+(off / mean / nearest prior), seconds vs minutes, linear/log, each run vs mean by type, raw blanks.
+Hover for exact time + CPS, drag to zoom onto a peak and read apex times from the table,
+click to pin points; both tables copy as tab-separated text for Excel.
+
+To make a copy with a batch preloaded: `python lcicpms/make_viewer.py path/to/csv_folder`.

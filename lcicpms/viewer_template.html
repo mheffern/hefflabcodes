@@ -1,0 +1,423 @@
+<title>LC-ICP-MS Trace Viewer</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>
+<style>
+/* Layout: instrument-software feel. Control rail on top, stacked metal panels, readout + peak tables below. */
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --ink: #14171c; --ink-2: #4c5562; --ink-3: #7c8592;
+  --line: #dde1e7; --grid: #eceef2; --accent: #0f6e8c; --accent-soft: #e2f0f4;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4; --s6: #008300; --s7: #6250d6; --s8: #e34948;
+  --blank: #8a8f98;
+  --font: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #111418; --panel: #191d22; --ink: #eef1f4; --ink-2: #b4bcc6; --ink-3: #848d99;
+  --line: #2b3139; --grid: #232830; --accent: #5cc0dd; --accent-soft: #16323b;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #0ca30c; --s7: #9085e9; --s8: #e66767;
+  --blank: #9aa1ab; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #111418; --panel: #191d22; --ink: #eef1f4; --ink-2: #b4bcc6; --ink-3: #848d99;
+  --line: #2b3139; --grid: #232830; --accent: #5cc0dd; --accent-soft: #16323b;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #0ca30c; --s7: #9085e9; --s8: #e66767;
+  --blank: #9aa1ab; color-scheme: dark; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font); font-size: 14px; }
+.wrap { max-width: 1280px; margin: 0 auto; padding-block: 20px 40px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 16px; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; }
+h1 { font-size: 20px; font-weight: 600; margin: 0; text-wrap: balance; }
+.sub { color: var(--ink-2); font-size: 13px; }
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px; min-width: 0; }
+.controls { display: flex; flex-wrap: wrap; gap: 14px 22px; align-items: flex-end; }
+.ctl { display: grid; gap: 6px; }
+.lbl { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-3); font-weight: 500; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.seg button { font: inherit; font-size: 13px; padding: 6px 11px; border: 0; background: transparent; color: var(--ink-2); cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--panel); font-weight: 500; }
+button:focus-visible, label:focus-within { outline: 2px solid var(--accent); outline-offset: 1px; }
+.btn { font: inherit; font-size: 13px; padding: 6px 11px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--ink); cursor: pointer; }
+.btn:hover { border-color: var(--accent); }
+.samples { display: grid; gap: 10px; }
+.tgroup { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.tname { font-size: 12px; font-weight: 600; color: var(--ink-2); min-width: 110px; cursor: pointer; background: none; border: 0; padding: 2px 0; text-align: left; font-family: inherit; }
+.chip { display: inline-flex; align-items: center; gap: 6px; font: inherit; font-size: 12.5px; padding: 4px 9px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--panel); color: var(--ink); cursor: pointer; }
+.chip .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.chip[aria-pressed="false"] { color: var(--ink-3); background: transparent; }
+.chip[aria-pressed="false"] .dot { opacity: .25; }
+.chip.dashed .dot { box-shadow: 0 0 0 2px var(--panel), 0 0 0 3px currentColor; }
+#plot { width: 100%; min-height: 420px; }
+.split { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 860px) { .split { grid-template-columns: 1fr; } }
+h2 { font-size: 14px; font-weight: 600; margin: 0 0 4px; }
+.hint { color: var(--ink-3); font-size: 12.5px; margin: 0 0 10px; }
+.tbl { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+th { text-align: left; font-weight: 500; color: var(--ink-3); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+td { padding: 5px 8px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+td.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+td .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+.readout { font-family: var(--mono); font-size: 13px; color: var(--ink); margin-bottom: 8px; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
+.empty { color: var(--ink-3); font-size: 12.5px; padding: 6px 0; }
+.x { background: none; border: 0; color: var(--ink-3); cursor: pointer; font-size: 14px; padding: 0 4px; }
+.x:hover { color: var(--ink); }
+.note { font-size: 12px; color: var(--ink-3); }
+input[type=file] { display: none; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>LC-ICP-MS Trace Viewer</h1>
+      <div class="sub" id="batchInfo">No data loaded</div>
+    </div>
+    <label class="btn" for="files" id="loadBtn">Load CSV files…</label>
+    <input type="file" id="files" accept=".csv,text/csv" multiple>
+  </header>
+
+  <section class="card controls" aria-label="Display options">
+    <div class="ctl"><span class="lbl">Method</span><div class="seg" id="methodSeg"></div></div>
+    <div class="ctl"><span class="lbl">Metals</span><div class="seg" id="metalSeg"></div></div>
+    <div class="ctl"><span class="lbl">Blank subtraction</span><div class="seg" id="blankSeg"></div></div>
+    <div class="ctl"><span class="lbl">Time axis</span><div class="seg" id="unitSeg"></div></div>
+    <div class="ctl"><span class="lbl">Y axis</span><div class="seg" id="ySeg"></div></div>
+    <div class="ctl"><span class="lbl">Show</span><div class="seg" id="viewSeg"></div></div>
+    <div class="ctl"><span class="lbl">Blank traces</span><div class="seg" id="showBlankSeg"></div></div>
+  </section>
+
+  <section class="card" aria-label="Samples">
+    <div class="row" style="margin-bottom:10px">
+      <span class="lbl">Samples — tap a chip to show/hide, tap a type name to toggle the whole type</span>
+      <span style="display:flex;gap:6px"><button class="btn" id="allOn">All</button><button class="btn" id="allOff">None</button></span>
+    </div>
+    <div class="samples" id="samples"></div>
+  </section>
+
+  <section class="card" aria-label="Chromatograms">
+    <div class="readout" id="readout">Hover or tap the plot to read exact time and CPS. Click a point to mark it.</div>
+    <div id="plot"></div>
+    <div class="note" id="blankNote"></div>
+  </section>
+
+  <div class="split">
+    <section class="card">
+      <div class="row"><h2>Apex in current view</h2><button class="btn" id="copyApex">Copy table</button></div>
+      <p class="hint">Highest point of each visible trace inside the zoomed time range. Drag across the plot to zoom onto one peak; double-click to reset.</p>
+      <div class="tbl"><table id="apexTbl"></table></div>
+    </section>
+    <section class="card">
+      <div class="row"><h2>Marked points</h2><span style="display:flex;gap:6px"><button class="btn" id="copyMarks">Copy table</button><button class="btn" id="clearMarks">Clear</button></span></div>
+      <p class="hint">Click any point on a trace to pin its exact time and intensity here.</p>
+      <div class="tbl"><table id="markTbl"></table></div>
+    </section>
+  </div>
+</div>
+
+<script>
+const EMBEDDED = /*__DATA__*/null;
+
+/* ---------- parsing (same rules as analyze_lcicpms.py) ---------- */
+function parseCsv(text, fname) {
+  const lines = text.replace(/^﻿/, "").split(/\r?\n/);
+  let name = fname.replace(/\.csv$/i, ""), acquired = null, hdr = -1;
+  for (let i = 0; i < Math.min(20, lines.length); i++) {
+    const first = lines[i].split(",")[0].trim();
+    if (/\.d$/i.test(first)) name = first.split(/[\\/]/).pop().slice(0, -2);
+    const m = lines[i].match(/(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})/);
+    if (/acquired/i.test(lines[i]) && m) acquired = m[1];
+    if (/^time/i.test(first)) { hdr = i; break; }
+  }
+  if (hdr < 0) return null;
+  let cols = lines[hdr].split(",").map(s => s.trim());
+  while (cols.length && !cols[cols.length - 1]) cols.pop();
+  const data = cols.map(() => []);
+  for (let i = hdr + 1; i < lines.length; i++) {
+    const p = lines[i].split(",").slice(0, cols.length).map(s => s.trim());
+    if (p.length < cols.length || p.some(v => v === "" || isNaN(+v))) break;
+    p.forEach((v, j) => data[j].push(+v));
+  }
+  const run = { name, acquired, t: data[0], metals: {} };
+  cols.slice(1).forEach((c, j) => run.metals[c] = data[j + 1]);
+  return run;
+}
+const isBlank = n => /blank/i.test(n);
+const guessType = n => isBlank(n) ? "Blank" : (n.replace(/_\d+$/, "").replace(/-\d+$/, "") || n);
+
+/* ---------- state ---------- */
+let RUNS = [], METHODS = [], METALS = [];
+const S = { method: null, metals: new Set(), blank: "nearest", unit: "min", y: "linear", view: "runs", showBlanks: false, hidden: new Set(), marks: [] };
+try { const saved = JSON.parse(localStorage.getItem("icpms-viewer") || "{}"); Object.assign(S, { blank: saved.blank || S.blank, unit: saved.unit || S.unit, y: saved.y || S.y }); } catch (e) {}
+const save = () => { try { localStorage.setItem("icpms-viewer", JSON.stringify({ blank: S.blank, unit: S.unit, y: S.y })); } catch (e) {} };
+
+function loadRuns(runs, label) {
+  runs.forEach(r => {
+    r.type = r.type || guessType(r.name);
+    r.blank = r.blank ?? isBlank(r.name);
+    r.method = Math.round(r.t[r.t.length - 1] / 10) * 10;
+  });
+  runs.sort((a, b) => (a.acquired || "").localeCompare(b.acquired || ""));
+  RUNS = runs;
+  METHODS = [...new Set(runs.map(r => r.method))].sort((a, b) => b - a);
+  METALS = [...new Set(runs.flatMap(r => Object.keys(r.metals)))];
+  S.method = METHODS[0]; S.metals = new Set(METALS); S.hidden = new Set(); S.marks = [];
+  document.getElementById("batchInfo").textContent =
+    `${label} · ${runs.length} runs · ${METALS.join(", ")}`;
+  buildControls(); render();
+}
+
+/* ---------- helpers ---------- */
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const SLOTS = ["--s1","--s2","--s3","--s4","--s5","--s6","--s7","--s8"];
+function interp(x, xs, ys) {
+  const out = new Array(x.length); let j = 0;
+  for (let i = 0; i < x.length; i++) {
+    const xi = x[i];
+    if (xi <= xs[0]) { out[i] = ys[0]; continue; }
+    if (xi >= xs[xs.length - 1]) { out[i] = ys[ys.length - 1]; continue; }
+    while (xs[j + 1] < xi) j++;
+    const f = (xi - xs[j]) / (xs[j + 1] - xs[j]); out[i] = ys[j] + f * (ys[j + 1] - ys[j]);
+  }
+  return out;
+}
+const methodRuns = () => RUNS.filter(r => r.method === S.method);
+function colorMap() {
+  // color follows type within the method (fixed order of first appearance), replicate #2+ dashed
+  const types = [...new Set(methodRuns().filter(r => !r.blank).map(r => r.type))];
+  const byType = {}; types.forEach((t, i) => byType[t] = css(SLOTS[i % 8]));
+  const dash = {}; const seen = {};
+  methodRuns().filter(r => !r.blank).forEach(r => { seen[r.type] = (seen[r.type] || 0) + 1; dash[r.name] = seen[r.type] > 1; });
+  return { types, byType, dash };
+}
+function blankFor(run, metal) {
+  const blanks = methodRuns().filter(r => r.blank);
+  if (S.blank === "off" || !blanks.length) return { y: null, used: [] };
+  let use = blanks;
+  if (S.blank === "nearest") {
+    const before = blanks.filter(b => (b.acquired || "") < (run.acquired || ""));
+    use = [before.length ? before[before.length - 1] : blanks[0]];
+  }
+  const arrs = use.map(b => interp(run.t, b.t, b.metals[metal]));
+  return { y: run.t.map((_, i) => arrs.reduce((s, a) => s + a[i], 0) / arrs.length), used: use.map(b => b.name) };
+}
+const tx = t => S.unit === "min" ? t / 60 : t;
+const unitLbl = () => S.unit === "min" ? "min" : "s";
+const fmtT = t => S.unit === "min" ? (t / 60).toFixed(3) + " min" : t.toFixed(2) + " s";
+const fmtBoth = t => `${t.toFixed(2)} s · ${(t / 60).toFixed(3)} min`;
+const fmtC = v => Math.round(v).toLocaleString("en-US");
+
+/* ---------- controls ---------- */
+function seg(id, opts, key, after) {
+  const el = document.getElementById(id); el.innerHTML = "";
+  opts.forEach(([val, label]) => {
+    const b = document.createElement("button"); b.type = "button"; b.textContent = label;
+    const on = key === "metals" ? S.metals.has(val) : S[key] === val;
+    b.setAttribute("aria-pressed", on);
+    b.onclick = () => {
+      if (key === "metals") { S.metals.has(val) ? (S.metals.size > 1 && S.metals.delete(val)) : S.metals.add(val); }
+      else S[key] = val;
+      save(); (after || buildControls)(); render();
+    };
+    el.appendChild(b);
+  });
+}
+function buildControls() {
+  seg("methodSeg", METHODS.map(m => [m, `${m} s method · ${RUNS.filter(r => r.method === m).length} runs`]), "method", () => { xRange = null; buildControls(); });
+  seg("metalSeg", METALS.map(m => [m, m]), "metals");
+  seg("blankSeg", [["off","Off"],["mean","Mean of blanks"],["nearest","Nearest prior"]], "blank");
+  seg("unitSeg", [["s","Seconds"],["min","Minutes"]], "unit");
+  seg("ySeg", [["linear","Linear"],["log","Log"]], "y");
+  seg("viewSeg", [["runs","Each run"],["type","Mean by type"]], "view");
+  seg("showBlankSeg", [[false,"Hide"],[true,"Show raw"]], "showBlanks");
+  buildChips();
+}
+function buildChips() {
+  const { types, byType, dash } = colorMap();
+  const box = document.getElementById("samples"); box.innerHTML = "";
+  types.forEach(ty => {
+    const g = document.createElement("div"); g.className = "tgroup";
+    const tn = document.createElement("button"); tn.className = "tname"; tn.type = "button"; tn.textContent = ty;
+    const members = methodRuns().filter(r => !r.blank && r.type === ty);
+    tn.onclick = () => { const anyOn = members.some(r => !S.hidden.has(r.name));
+      members.forEach(r => anyOn ? S.hidden.add(r.name) : S.hidden.delete(r.name)); buildChips(); render(); };
+    g.appendChild(tn);
+    members.forEach(r => {
+      const c = document.createElement("button"); c.type = "button"; c.className = "chip" + (dash[r.name] ? " dashed" : "");
+      c.setAttribute("aria-pressed", !S.hidden.has(r.name));
+      c.innerHTML = `<span class="dot" style="background:${byType[ty]};color:${byType[ty]}"></span>${r.name}`;
+      c.title = r.acquired ? `Acquired ${r.acquired}` : "";
+      c.onclick = () => { S.hidden.has(r.name) ? S.hidden.delete(r.name) : S.hidden.add(r.name); buildChips(); render(); };
+      g.appendChild(c);
+    });
+    box.appendChild(g);
+  });
+  const blanks = methodRuns().filter(r => r.blank);
+  if (blanks.length) {
+    const g = document.createElement("div"); g.className = "tgroup";
+    g.innerHTML = `<span class="tname" style="cursor:default">Blanks</span><span class="note">${blanks.map(b => `${b.name}${b.acquired ? " (" + b.acquired.slice(11, 16) + ")" : ""}`).join(" · ")}</span>`;
+    box.appendChild(g);
+  }
+}
+document.getElementById("allOn").onclick = () => { S.hidden.clear(); buildChips(); render(); };
+document.getElementById("allOff").onclick = () => { methodRuns().forEach(r => S.hidden.add(r.name)); buildChips(); render(); };
+
+/* ---------- traces ---------- */
+let CURRENT = []; // [{label, metal, color, t(sec), y}]
+function computeSeries() {
+  const { types, byType, dash } = colorMap(); const out = []; const notes = new Set();
+  const metals = METALS.filter(m => S.metals.has(m));
+  const vis = methodRuns().filter(r => !r.blank && !S.hidden.has(r.name));
+  metals.forEach(m => {
+    const corr = vis.map(r => { const b = blankFor(r, m); b.used.forEach(u => notes.add(`${r.name} − ${u}`));
+      return { r, y: b.y ? r.metals[m].map((v, i) => v - b.y[i]) : r.metals[m] }; });
+    if (S.view === "runs") {
+      corr.forEach(({ r, y }) => out.push({ label: r.name, type: r.type, metal: m, color: byType[r.type], dash: dash[r.name], t: r.t, y }));
+    } else {
+      types.forEach(ty => {
+        const grp = corr.filter(c => c.r.type === ty); if (!grp.length) return;
+        const t = grp[0].r.t;
+        const ys = grp.map(c => c.r.t === t ? c.y : interp(t, c.r.t, c.y));
+        const mean = t.map((_, i) => ys.reduce((s, a) => s + a[i], 0) / ys.length);
+        out.push({ label: `${ty} (n=${grp.length})`, type: ty, metal: m, color: byType[ty], dash: false, t, y: mean });
+      });
+    }
+    if (S.showBlanks) methodRuns().filter(r => r.blank).forEach(b =>
+      out.push({ label: `${b.name} (raw)`, type: "Blank", metal: m, color: css("--blank"), dash: true, t: b.t, y: b.metals[m], isBlank: true }));
+  });
+  const nb = methodRuns().filter(r => r.blank).length;
+  document.getElementById("blankNote").textContent = S.blank === "off" ? "Blank subtraction off: raw CPS shown."
+    : !nb ? "No blank runs in this method, so nothing is subtracted."
+    : S.blank === "mean" ? `Subtracting the average of ${nb} blank run(s) from this method.`
+    : "Subtracting the blank run acquired most recently before each sample: " + [...new Set([...notes].map(n => n.split(" − ")[1]))].join(", ") + ".";
+  return out;
+}
+
+let xRange = null;
+function render() {
+  if (!RUNS.length) return;
+  CURRENT = computeSeries();
+  const metals = METALS.filter(m => S.metals.has(m));
+  const ink = css("--ink"), ink2 = css("--ink-2"), grid = css("--grid"), line = css("--line"), panel = css("--panel");
+  const traces = CURRENT.map(s => ({
+    type: "scattergl", mode: "lines", name: s.label, legendgroup: s.label, showlegend: s.metal === metals[0],
+    x: s.t.map(tx), y: s.y, xaxis: "x", yaxis: "y" + (metals.indexOf(s.metal) ? metals.indexOf(s.metal) + 1 : ""),
+    line: { color: s.color, width: s.isBlank ? 1 : 1.6, dash: s.dash ? "dash" : "solid" },
+    hovertemplate: `${s.label} · ${s.metal}<br>%{x:.3f} ${unitLbl()} · %{y:,.0f} CPS<extra></extra>`,
+  }));
+  const h = 1 / metals.length, gap = 0.06;
+  const layout = {
+    paper_bgcolor: panel, plot_bgcolor: panel, font: { family: css("--font"), color: ink2, size: 12 },
+    margin: { l: 70, r: 12, t: 8, b: 44 }, height: Math.max(420, 250 * metals.length + 60),
+    hovermode: "closest", dragmode: "zoom", hoverlabel: { font: { family: css("--mono"), size: 12 } },
+    showlegend: false,
+    xaxis: { title: { text: `Retention time (${unitLbl()})` }, gridcolor: grid, linecolor: line, zeroline: false,
+      showspikes: true, spikemode: "across", spikesnap: "cursor", spikecolor: ink2, spikethickness: 1, spikedash: "dot",
+      range: xRange ? xRange.map(tx) : undefined, anchor: "y" + (metals.length > 1 ? metals.length : "") },
+  };
+  metals.forEach((m, i) => {
+    const key = "yaxis" + (i ? i + 1 : "");
+    const top = 1 - i * h, bottom = top - h + (i < metals.length - 1 ? gap : 0);
+    layout[key] = { domain: [Math.max(0, bottom), top], title: { text: `${m} CPS`, font: { size: 12, color: ink } },
+      type: S.y, gridcolor: grid, linecolor: line, zerolinecolor: line, exponentformat: "SI",
+      showspikes: true, spikemode: "across", spikesnap: "cursor", spikecolor: ink2, spikethickness: 1, spikedash: "dot" };
+  });
+  // overlay marks
+  layout.shapes = []; layout.annotations = [];
+  const markTr = { type: "scatter", mode: "markers", showlegend: false, hoverinfo: "skip", x: [], y: [], xaxis: "x",
+    marker: { size: 10, color: panel, line: { color: ink, width: 2 } } };
+  S.marks.forEach(mk => { const i = metals.indexOf(mk.metal); if (i < 0) return;
+    traces.push({ ...markTr, x: [tx(mk.t)], y: [mk.y], yaxis: "y" + (i ? i + 1 : "") }); });
+  Plotly.react("plot", traces, layout, { responsive: true, displaylogo: false, scrollZoom: false,
+    modeBarButtonsToRemove: ["lasso2d", "select2d", "autoScale2d"] });
+  updateApex(); drawMarks();
+}
+
+/* ---------- cursor readout, zoom, click-to-mark ---------- */
+function nearestIdx(t, x) { let lo = 0, hi = t.length - 1; while (hi - lo > 1) { const m = (lo + hi) >> 1; (t[m] < x ? lo = m : hi = m); } return (x - t[lo] < t[hi] - x) ? lo : hi; }
+function bindPlot() {
+  const el = document.getElementById("plot");
+  el.on("plotly_hover", ev => {
+    const p = ev.points[0]; const s = CURRENT[p.curveNumber]; if (!s) return;
+    const tsec = S.unit === "min" ? p.x * 60 : p.x;
+    document.getElementById("readout").textContent = `${s.label} · ${s.metal} · t = ${fmtBoth(tsec)} · ${fmtC(p.y)} CPS`;
+  });
+  el.on("plotly_click", ev => {
+    const p = ev.points[0]; const s = CURRENT[p.curveNumber]; if (!s) return;
+    const tsec = S.unit === "min" ? p.x * 60 : p.x;
+    S.marks.push({ label: s.label, metal: s.metal, color: s.color, t: tsec, y: p.y });
+    render();
+  });
+  el.on("plotly_relayout", ev => {
+    if (ev["xaxis.autorange"]) xRange = null;
+    else if (ev["xaxis.range[0]"] !== undefined) {
+      const k = S.unit === "min" ? 60 : 1; xRange = [ev["xaxis.range[0]"] * k, ev["xaxis.range[1]"] * k];
+    } else return;
+    updateApex();
+  });
+}
+
+let APEX = [];
+function updateApex() {
+  const [a, b] = xRange || [-Infinity, Infinity];
+  APEX = CURRENT.filter(s => !s.isBlank).map(s => {
+    let best = -1, bi = -1;
+    for (let i = 0; i < s.t.length; i++) if (s.t[i] >= a && s.t[i] <= b && s.y[i] > best) { best = s.y[i]; bi = i; }
+    return bi < 0 ? null : { label: s.label, metal: s.metal, color: s.color, t: s.t[bi], y: best };
+  }).filter(Boolean);
+  const range = xRange ? `${fmtT(xRange[0])} – ${fmtT(xRange[1])}` : "full run";
+  document.getElementById("apexTbl").innerHTML = APEX.length
+    ? `<caption class="note" style="caption-side:top;text-align:left;padding-bottom:6px">Range: ${range}</caption>
+       <tr><th>Trace</th><th>Metal</th><th style="text-align:right">Apex (s)</th><th style="text-align:right">Apex (min)</th><th style="text-align:right">CPS</th></tr>` +
+      APEX.map(r => `<tr><td><span class="dot" style="background:${r.color}"></span>${r.label}</td><td>${r.metal}</td>
+        <td class="num">${r.t.toFixed(2)}</td><td class="num">${(r.t / 60).toFixed(3)}</td><td class="num">${fmtC(r.y)}</td></tr>`).join("")
+    : `<tr><td class="empty">No visible traces in this range.</td></tr>`;
+}
+function drawMarks() {
+  document.getElementById("markTbl").innerHTML = S.marks.length
+    ? `<tr><th>Trace</th><th>Metal</th><th style="text-align:right">Time (s)</th><th style="text-align:right">Time (min)</th><th style="text-align:right">CPS</th><th></th></tr>` +
+      S.marks.map((r, i) => `<tr><td><span class="dot" style="background:${r.color}"></span>${r.label}</td><td>${r.metal}</td>
+        <td class="num">${r.t.toFixed(2)}</td><td class="num">${(r.t / 60).toFixed(3)}</td><td class="num">${fmtC(r.y)}</td>
+        <td><button class="x" data-i="${i}" aria-label="Remove mark">×</button></td></tr>`).join("")
+    : `<tr><td class="empty">No marks yet. Click a point on any trace.</td></tr>`;
+  document.querySelectorAll("#markTbl .x").forEach(b => b.onclick = () => { S.marks.splice(+b.dataset.i, 1); render(); });
+}
+document.getElementById("clearMarks").onclick = () => { S.marks = []; render(); };
+function copyRows(rows, btn) {
+  const txt = ["trace\tmetal\ttime_s\ttime_min\tcps", ...rows.map(r => [r.label, r.metal, r.t.toFixed(2), (r.t / 60).toFixed(3), Math.round(r.y)].join("\t"))].join("\n");
+  const done = () => { const o = btn.textContent; btn.textContent = "Copied"; setTimeout(() => btn.textContent = o, 1200); };
+  const fail = () => { btn.textContent = "Copy blocked"; };
+  try { navigator.clipboard.writeText(txt).then(done, fail); } catch (e) { fail(); }
+}
+document.getElementById("copyApex").onclick = e => copyRows(APEX, e.currentTarget);
+document.getElementById("copyMarks").onclick = e => copyRows(S.marks, e.currentTarget);
+
+/* ---------- file loading ---------- */
+document.getElementById("files").addEventListener("change", async ev => {
+  const files = [...ev.target.files]; if (!files.length) return;
+  const runs = [];
+  for (const f of files) { const r = parseCsv(await f.text(), f.name); if (r && r.t.length) runs.push(r); }
+  if (!runs.length) { document.getElementById("batchInfo").textContent = "None of those files had a 'Time [Sec]' table. Pick the MassHunter CSV exports."; return; }
+  xRange = null; loadRuns(runs, `${runs.length} file(s) loaded from your computer`);
+});
+
+/* ---------- theme changes ---------- */
+const rerender = () => { buildChips(); render(); };
+matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", rerender);
+new MutationObserver(rerender).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
+/* ---------- boot ---------- */
+function boot() {
+  bindPlotOnce();
+  if (EMBEDDED) loadRuns(EMBEDDED.runs, EMBEDDED.label);
+  else document.getElementById("readout").textContent = "Load the CSV exports from one batch to begin (select all files at once).";
+}
+let bound = false;
+function bindPlotOnce() { if (bound) return; Plotly.newPlot("plot", [], {}); bindPlot(); bound = true; }
+if (window.Plotly) boot(); else window.addEventListener("load", boot);
+</script>
