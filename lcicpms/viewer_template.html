@@ -9,7 +9,7 @@
   --bg: #f6f7f9; --panel: #ffffff; --ink: #14171c; --ink-2: #4c5562; --ink-3: #7c8592;
   --line: #dde1e7; --grid: #eceef2; --accent: #0f6e8c; --accent-soft: #e2f0f4;
   --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4; --s6: #008300; --s7: #6250d6; --s8: #e34948;
-  --blank: #8a8f98;
+  --blank: #8a8f98; --warn: #a3520c;
   --font: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
 }
@@ -17,12 +17,12 @@
   --bg: #111418; --panel: #191d22; --ink: #eef1f4; --ink-2: #b4bcc6; --ink-3: #848d99;
   --line: #2b3139; --grid: #232830; --accent: #5cc0dd; --accent-soft: #16323b;
   --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #0ca30c; --s7: #9085e9; --s8: #e66767;
-  --blank: #9aa1ab; color-scheme: dark; } }
+  --blank: #9aa1ab; --warn: #f0a640; color-scheme: dark; } }
 :root[data-theme="dark"] {
   --bg: #111418; --panel: #191d22; --ink: #eef1f4; --ink-2: #b4bcc6; --ink-3: #848d99;
   --line: #2b3139; --grid: #232830; --accent: #5cc0dd; --accent-soft: #16323b;
   --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #0ca30c; --s7: #9085e9; --s8: #e66767;
-  --blank: #9aa1ab; color-scheme: dark; }
+  --blank: #9aa1ab; --warn: #f0a640; color-scheme: dark; }
 body { background: var(--bg); color: var(--ink); font-family: var(--font); font-size: 14px; }
 .wrap { max-width: 1280px; margin: 0 auto; padding-block: 20px 40px;
   padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
@@ -68,6 +68,9 @@ td .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; ma
 .x { background: none; border: 0; color: var(--ink-3); cursor: pointer; font-size: 14px; padding: 0 4px; }
 .x:hover { color: var(--ink); }
 .note { font-size: 12px; color: var(--ink-3); }
+.num-in { width: 72px; font: inherit; font-family: var(--mono); font-size: 13px; padding: 5px 7px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--ink); }
+td.hi { color: var(--warn); font-weight: 600; }
+.seg button:disabled { opacity: .4; cursor: default; }
 input[type=file] { display: none; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
@@ -104,6 +107,19 @@ input[type=file] { display: none; }
     <div class="readout" id="readout">Hover or tap the plot to read exact time and CPS. Click a point to mark it.</div>
     <div id="plot"></div>
     <div class="note" id="blankNote"></div>
+  </section>
+
+  <section class="card" id="carryCard" hidden aria-label="Carryover check">
+    <div class="row" style="align-items:flex-end">
+      <div><h2>Carryover check</h2>
+        <p class="hint" style="margin:0">Each blank's signal inside the peak window, as a % of the run injected just before it. Areas use a straight local baseline across the window, so baseline drift does not count as carryover.</p></div>
+      <div class="ctl"><span class="lbl">Peak window (s)</span>
+        <span style="display:flex;gap:6px;align-items:center"><input id="winA" type="number" value="300" step="10" class="num-in" aria-label="Window start (s)"> to <input id="winB" type="number" value="550" step="10" class="num-in" aria-label="Window end (s)"></span></div>
+    </div>
+    <div class="tbl" style="margin-top:10px"><table id="carryTbl"></table></div>
+    <h2 style="margin-top:18px">Background through the queue</h2>
+    <p class="hint">Median raw CPS over the first 60 s of each run (before anything elutes), in acquisition order. A rising line means metal building up in the system; open circles are blanks.</p>
+    <div id="bgPlot"></div>
   </section>
 
   <div class="split">
@@ -187,12 +203,13 @@ function interp(x, xs, ys) {
   return out;
 }
 const methodRuns = () => RUNS.filter(r => r.method === S.method);
+const scopeRuns = () => S.view === "order" ? RUNS : methodRuns();
 function colorMap() {
   // color follows type within the method (fixed order of first appearance), replicate #2+ dashed
-  const types = [...new Set(methodRuns().filter(r => !r.blank).map(r => r.type))];
+  const types = [...new Set(scopeRuns().filter(r => !r.blank).map(r => r.type))];
   const byType = {}; types.forEach((t, i) => byType[t] = css(SLOTS[i % 8]));
   const dash = {}; const seen = {};
-  methodRuns().filter(r => !r.blank).forEach(r => { seen[r.type] = (seen[r.type] || 0) + 1; dash[r.name] = seen[r.type] > 1; });
+  scopeRuns().filter(r => !r.blank).forEach(r => { seen[r.type] = (seen[r.type] || 0) + 1; dash[r.name] = seen[r.type] > 1; });
   return { types, byType, dash };
 }
 function blankFor(run, metal) {
@@ -233,8 +250,11 @@ function buildControls() {
   seg("blankSeg", [["off","Off"],["mean","Mean of blanks"],["nearest","Nearest prior"]], "blank");
   seg("unitSeg", [["s","Seconds"],["min","Minutes"]], "unit");
   seg("ySeg", [["linear","Linear"],["log","Log"]], "y");
-  seg("viewSeg", [["runs","Each run"],["type","Mean by type"]], "view");
+  seg("viewSeg", [["runs","Each run"],["type","Mean by type"],["order","Run order"]], "view", () => { xRange = null; buildControls(); });
   seg("showBlankSeg", [[false,"Hide"],[true,"Show raw"]], "showBlanks");
+  const order = S.view === "order";
+  ["methodSeg", "blankSeg", "showBlankSeg"].forEach(id => document.querySelectorAll(`#${id} button`).forEach(b => b.disabled = order));
+  document.getElementById("carryCard").hidden = !order;
   buildChips();
 }
 function buildChips() {
@@ -243,7 +263,7 @@ function buildChips() {
   types.forEach(ty => {
     const g = document.createElement("div"); g.className = "tgroup";
     const tn = document.createElement("button"); tn.className = "tname"; tn.type = "button"; tn.textContent = ty;
-    const members = methodRuns().filter(r => !r.blank && r.type === ty);
+    const members = scopeRuns().filter(r => !r.blank && r.type === ty);
     tn.onclick = () => { const anyOn = members.some(r => !S.hidden.has(r.name));
       members.forEach(r => anyOn ? S.hidden.add(r.name) : S.hidden.delete(r.name)); buildChips(); render(); };
     g.appendChild(tn);
@@ -257,7 +277,7 @@ function buildChips() {
     });
     box.appendChild(g);
   });
-  const blanks = methodRuns().filter(r => r.blank);
+  const blanks = scopeRuns().filter(r => r.blank);
   if (blanks.length) {
     const g = document.createElement("div"); g.className = "tgroup";
     g.innerHTML = `<span class="tname" style="cursor:default">Blanks</span><span class="note">${blanks.map(b => `${b.name}${b.acquired ? " (" + b.acquired.slice(11, 16) + ")" : ""}`).join(" · ")}</span>`;
@@ -265,7 +285,7 @@ function buildChips() {
   }
 }
 document.getElementById("allOn").onclick = () => { S.hidden.clear(); buildChips(); render(); };
-document.getElementById("allOff").onclick = () => { methodRuns().forEach(r => S.hidden.add(r.name)); buildChips(); render(); };
+document.getElementById("allOff").onclick = () => { scopeRuns().forEach(r => S.hidden.add(r.name)); buildChips(); render(); };
 
 /* ---------- traces ---------- */
 let CURRENT = []; // [{label, metal, color, t(sec), y}]
@@ -301,6 +321,7 @@ function computeSeries() {
 let xRange = null;
 function render() {
   if (!RUNS.length) return;
+  if (S.view === "order") return renderOrder();
   CURRENT = computeSeries();
   const metals = METALS.filter(m => S.metals.has(m));
   const ink = css("--ink"), ink2 = css("--ink-2"), grid = css("--grid"), line = css("--line"), panel = css("--panel");
@@ -338,6 +359,112 @@ function render() {
   updateApex(); drawMarks();
 }
 
+/* ---------- run order view (bleed-over / carryover) ---------- */
+function windowArea(t, y, a, b) {
+  // area inside [a,b] after subtracting a straight baseline between the window edges
+  const idx = []; for (let i = 0; i < t.length; i++) if (t[i] >= a && t[i] <= b) idx.push(i);
+  if (idx.length < 8) return null;
+  const k = 5, med = arr => { const s = [...arr].sort((p, q) => p - q); return s[s.length >> 1]; };
+  const head = idx.slice(0, k), tail = idx.slice(-k);
+  const x0 = head.reduce((s, i) => s + t[i], 0) / k, x1 = tail.reduce((s, i) => s + t[i], 0) / k;
+  const y0 = med(head.map(i => y[i])), y1 = med(tail.map(i => y[i]));
+  let area = 0;
+  for (let j = 1; j < idx.length; j++) {
+    const i = idx[j], h = idx[j - 1];
+    const bi = y0 + (y1 - y0) * (t[i] - x0) / (x1 - x0), bh = y0 + (y1 - y0) * (t[h] - x0) / (x1 - x0);
+    area += 0.5 * ((y[i] - bi) + (y[h] - bh)) * (t[i] - t[h]);
+  }
+  return area;
+}
+const hhmm = r => r.acquired ? r.acquired.slice(11, 16) : "";
+function renderOrder() {
+  const metals = METALS.filter(m => S.metals.has(m));
+  const { byType } = colorMap();
+  const rows = RUNS.filter(r => r.blank || !S.hidden.has(r.name));
+  const ink = css("--ink"), ink2 = css("--ink-2"), ink3 = css("--ink-3"), grid = css("--grid"), line = css("--line"),
+        panel = css("--panel"), soft = css("--accent-soft"), blankC = css("--blank");
+  const wa = +document.getElementById("winA").value, wb = +document.getElementById("winB").value;
+  const nR = rows.length, nC = metals.length, rowH = 1 / nR, colW = 1 / nC, gx = nC > 1 ? 0.04 : 0, gy = Math.min(0.012, rowH * 0.18);
+  CURRENT = []; const traces = [];
+  const layout = { paper_bgcolor: panel, plot_bgcolor: panel, font: { family: css("--font"), color: ink2, size: 11 },
+    margin: { l: 56, r: 10, t: 26, b: 44 }, height: 86 * nR + 80, showlegend: false, hovermode: "closest",
+    hoverlabel: { font: { family: css("--mono"), size: 12 } }, shapes: [], annotations: [] };
+  metals.forEach((m, c) => layout.annotations.push({ text: `<b>${m}</b> raw CPS`, xref: "paper", yref: "paper",
+    x: c * colW + (colW - gx) / 2, y: 1, yanchor: "bottom", yshift: 6, showarrow: false, font: { size: 12, color: ink } }));
+  rows.forEach((r, ri) => metals.forEach((m, c) => {
+    const k = ri * nC + c + 1, xa = "x" + (k > 1 ? k : ""), ya = "y" + (k > 1 ? k : "");
+    const xk = "xaxis" + (k > 1 ? k : ""), yk = "yaxis" + (k > 1 ? k : "");
+    const top = 1 - ri * rowH, bottom = top - rowH + gy;
+    layout[xk] = { domain: [c * colW, (c + 1) * colW - gx], anchor: ya, matches: k > 1 ? "x" : undefined,
+      showticklabels: ri === nR - 1, gridcolor: grid, linecolor: line, zeroline: false, tickfont: { size: 10 },
+      title: ri === nR - 1 ? { text: `Retention time (${unitLbl()})`, font: { size: 11 } } : undefined,
+      showspikes: true, spikemode: "across", spikesnap: "cursor", spikecolor: ink2, spikethickness: 1, spikedash: "dot",
+      range: xRange ? xRange.map(tx) : undefined };
+    layout[yk] = { domain: [bottom, top], anchor: xa, type: S.y, gridcolor: grid, linecolor: line, zerolinecolor: line,
+      nticks: 3, tickfont: { size: 9 }, exponentformat: "SI", rangemode: S.y === "log" ? undefined : "tozero" };
+    const col = r.blank ? blankC : (byType[r.type] || ink3);
+    traces.push({ type: "scattergl", mode: "lines", x: r.t.map(tx), y: r.metals[m], xaxis: xa, yaxis: ya,
+      line: { color: col, width: r.blank ? 1.4 : 1.2 },
+      hovertemplate: `#${RUNS.indexOf(r) + 1} ${r.name} · ${m}<br>%{x:.3f} ${unitLbl()} · %{y:,.0f} CPS<extra></extra>` });
+    CURRENT.push({ label: r.name, metal: m, color: col, t: r.t, y: r.metals[m], xa, ya });
+    if (r.blank) layout.shapes.push({ type: "rect", layer: "below", xref: xa + " domain", yref: ya + " domain", x0: 0, x1: 1, y0: 0, y1: 1, fillcolor: soft, line: { width: 0 } });
+    layout.shapes.push({ type: "rect", layer: "below", xref: xa, yref: ya + " domain", x0: tx(wa), x1: tx(wb), y0: 0, y1: 1, fillcolor: grid, line: { width: 0 } });
+    if (c === 0) layout.annotations.push({ text: `#${RUNS.indexOf(r) + 1} · ${hhmm(r)} · <b>${r.name}</b>${r.blank ? " (blank)" : ""}`,
+      xref: xa + " domain", yref: ya + " domain", x: 0.005, y: 0.98, xanchor: "left", yanchor: "top", showarrow: false,
+      font: { size: 10.5, color: ink }, bgcolor: r.blank ? soft : panel, borderpad: 1 });
+  }));
+  S.marks.forEach(mk => { const s = CURRENT.find(c => c.label === mk.label && c.metal === mk.metal); if (!s) return;
+    traces.push({ type: "scatter", mode: "markers", hoverinfo: "skip", x: [tx(mk.t)], y: [mk.y], xaxis: s.xa, yaxis: s.ya,
+      marker: { size: 9, color: panel, line: { color: ink, width: 2 } } }); });
+  document.getElementById("blankNote").textContent =
+    `All ${RUNS.length} runs in the order they were acquired, raw CPS (no blank subtraction), each panel on its own scale. Shaded rows are blanks; the grey band is the peak window used below.`;
+  Plotly.react("plot", traces, layout, { responsive: true, displaylogo: false, modeBarButtonsToRemove: ["lasso2d", "select2d", "autoScale2d"] });
+  updateApex(); drawMarks(); renderCarry(metals);
+}
+function renderCarry(metals) {
+  const wa = +document.getElementById("winA").value, wb = +document.getElementById("winB").value;
+  const rowsHtml = [];
+  RUNS.forEach((r, i) => {
+    if (!r.blank || i === 0) return;
+    const prev = RUNS[i - 1];
+    const cells = metals.map(m => {
+      const ab = windowArea(r.t, r.metals[m], wa, wb), ap = windowArea(prev.t, prev.metals[m], wa, wb);
+      if (ab == null || ap == null || ap <= 0) return `<td class="num">–</td>`;
+      const pct = 100 * Math.max(0, ab) / ap;
+      return `<td class="num${pct >= 1 ? " hi" : ""}" title="blank ${fmtC(ab)} vs ${fmtC(ap)} CPS·s">${pct < 0.01 ? "<0.01" : pct.toFixed(2)}%</td>`;
+    }).join("");
+    rowsHtml.push(`<tr><td>#${i + 1} ${r.name} <span class="note">${hhmm(r)}</span></td><td>#${i} ${prev.name}${prev.blank ? " (blank)" : ""}</td>${cells}</tr>`);
+  });
+  document.getElementById("carryTbl").innerHTML = rowsHtml.length
+    ? `<tr><th>Blank</th><th>Injected just before</th>${metals.map(m => `<th style="text-align:right">${m}</th>`).join("")}</tr>${rowsHtml.join("")}
+       <tr><td colspan="${2 + metals.length}" class="note" style="white-space:normal;padding-top:8px">Values of 1% or more are highlighted. Negative blank areas (blank below its own baseline) count as 0%. Hover a value to see both areas.</td></tr>`
+    : `<tr><td class="empty">No blank follows another run in this batch, so carryover can't be estimated.</td></tr>`;
+  // background through the queue
+  const ink = css("--ink"), ink2 = css("--ink-2"), grid = css("--grid"), line = css("--line"), panel = css("--panel"), blankC = css("--blank");
+  const { byType } = colorMap(); const n = metals.length;
+  const traces = [], layout = { paper_bgcolor: panel, plot_bgcolor: panel, font: { family: css("--font"), color: ink2, size: 11 },
+    margin: { l: 56, r: 10, t: 10, b: 90 }, height: 170 * n + 110, showlegend: false, hovermode: "closest",
+    hoverlabel: { font: { family: css("--mono"), size: 12 } } };
+  const labels = RUNS.map((r, i) => `#${i + 1} ${r.name.length > 16 ? r.name.slice(0, 15) + "…" : r.name}`);
+  metals.forEach((m, j) => {
+    const k = j + 1, ya = "y" + (k > 1 ? k : ""), yk = "yaxis" + (k > 1 ? k : "");
+    const bg = RUNS.map(r => { const v = r.metals[m].filter((_, i) => r.t[i] <= 60).sort((a, b) => a - b); return v[v.length >> 1]; });
+    traces.push({ type: "scatter", mode: "lines", x: labels, y: bg, yaxis: ya, line: { color: line, width: 1.5 }, hoverinfo: "skip" });
+    traces.push({ type: "scatter", mode: "markers", x: labels, y: bg, yaxis: ya,
+      marker: { size: 9, color: RUNS.map(r => r.blank ? panel : (byType[r.type] || ink2)),
+        line: { color: RUNS.map(r => r.blank ? blankC : panel), width: 2 } },
+      customdata: RUNS.map(r => [r.name, hhmm(r)]),
+      hovertemplate: `%{customdata[0]} (%{customdata[1]})<br>${m} background %{y:,.0f} CPS<extra></extra>` });
+    const top = 1 - j / n, bottom = top - 1 / n + 0.07;
+    layout[yk] = { domain: [bottom, top], title: { text: `${m}`, font: { size: 11, color: ink } }, gridcolor: grid, linecolor: line,
+      zeroline: false, rangemode: "tozero", exponentformat: "SI", tickfont: { size: 10 } };
+    if (k > 1) layout["yaxis" + k].anchor = "x";
+  });
+  layout.xaxis = { tickangle: -45, tickfont: { size: 9.5 }, gridcolor: grid, linecolor: line, anchor: "y" + (n > 1 ? n : "") };
+  Plotly.react("bgPlot", traces, layout, { responsive: true, displaylogo: false, displayModeBar: false });
+}
+["winA", "winB"].forEach(id => document.getElementById(id).addEventListener("change", () => S.view === "order" && render()));
+
 /* ---------- cursor readout, zoom, click-to-mark ---------- */
 function nearestIdx(t, x) { let lo = 0, hi = t.length - 1; while (hi - lo > 1) { const m = (lo + hi) >> 1; (t[m] < x ? lo = m : hi = m); } return (x - t[lo] < t[hi] - x) ? lo : hi; }
 function bindPlot() {
@@ -354,9 +481,11 @@ function bindPlot() {
     render();
   });
   el.on("plotly_relayout", ev => {
-    if (ev["xaxis.autorange"]) xRange = null;
-    else if (ev["xaxis.range[0]"] !== undefined) {
-      const k = S.unit === "min" ? 60 : 1; xRange = [ev["xaxis.range[0]"] * k, ev["xaxis.range[1]"] * k];
+    const keys = Object.keys(ev);
+    const r0 = keys.find(k => /^xaxis\d*\.range\[0\]$/.test(k));
+    if (keys.some(k => /^xaxis\d*\.autorange$/.test(k) && ev[k])) xRange = null;
+    else if (r0) {
+      const k = S.unit === "min" ? 60 : 1; xRange = [ev[r0] * k, ev[r0.replace("[0]", "[1]")] * k];
     } else return;
     updateApex();
   });
