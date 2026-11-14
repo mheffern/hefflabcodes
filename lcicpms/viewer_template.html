@@ -71,7 +71,10 @@ input[type=file] { display: none; }
 
 /* plot + tables */
 #plot { width: 100%; min-height: 420px; }
-.readout { font-family: var(--mono); font-size: 13px; color: var(--ink); margin-bottom: 8px; overflow-wrap: anywhere; }
+.readout { font-family: var(--mono); font-size: 13px; color: var(--ink); overflow-wrap: anywhere; min-width: 0; flex: 1 1 280px; }
+.plotbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; margin-bottom: 8px;
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--panel); padding-block: 6px; }
+.zoombar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
 .split { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 @media (max-width: 860px) { .split { grid-template-columns: 1fr; } }
 .tbl { overflow-x: auto; }
@@ -147,7 +150,6 @@ dl.kv dd { margin: 0; overflow-wrap: anywhere; }
     <div class="ctl"><span class="lbl">Blank subtraction</span><div class="seg" id="blankSeg"></div></div>
     <div class="ctl"><span class="lbl">Time axis</span><div class="seg" id="unitSeg"></div></div>
     <div class="ctl"><span class="lbl">Y axis</span><div class="seg" id="ySeg"></div></div>
-    <div class="ctl"><span class="lbl">Zoom &amp; scroll acts on</span><span style="display:flex;gap:6px;flex-wrap:wrap"><div class="seg" id="zoomSeg"></div><button class="btn" id="resetZoom">Reset zoom</button></span></div>
     <div class="ctl"><span class="lbl">Show</span><div class="seg" id="viewSeg"></div></div>
     <div class="ctl"><span class="lbl">Blank traces</span><div class="seg" id="showBlankSeg"></div></div>
   </section>
@@ -161,7 +163,10 @@ dl.kv dd { margin: 0; overflow-wrap: anywhere; }
   </section>
 
   <section class="card" aria-label="Chromatograms">
-    <div class="readout" id="readout">Hover or tap the plot to read exact time and CPS. Click a point to mark it.</div>
+    <div class="plotbar">
+      <div class="readout" id="readout">Hover or tap the plot to read exact time and CPS. Click a point to mark it.</div>
+      <div class="zoombar"><span class="lbl">Zoom acts on</span><div class="seg" id="zoomSeg"></div><button class="btn" id="resetZoom">Reset zoom</button></div>
+    </div>
     <div id="plot"></div>
     <div class="note" id="blankNote"></div>
   </section>
