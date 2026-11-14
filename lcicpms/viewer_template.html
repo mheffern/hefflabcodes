@@ -147,6 +147,7 @@ dl.kv dd { margin: 0; overflow-wrap: anywhere; }
     <div class="ctl"><span class="lbl">Blank subtraction</span><div class="seg" id="blankSeg"></div></div>
     <div class="ctl"><span class="lbl">Time axis</span><div class="seg" id="unitSeg"></div></div>
     <div class="ctl"><span class="lbl">Y axis</span><div class="seg" id="ySeg"></div></div>
+    <div class="ctl"><span class="lbl">Zoom &amp; scroll acts on</span><span style="display:flex;gap:6px;flex-wrap:wrap"><div class="seg" id="zoomSeg"></div><button class="btn" id="resetZoom">Reset zoom</button></span></div>
     <div class="ctl"><span class="lbl">Show</span><div class="seg" id="viewSeg"></div></div>
     <div class="ctl"><span class="lbl">Blank traces</span><div class="seg" id="showBlankSeg"></div></div>
   </section>
@@ -181,7 +182,7 @@ dl.kv dd { margin: 0; overflow-wrap: anywhere; }
   <div class="split">
     <section class="card">
       <div class="row"><h2>Apex in current view</h2><button class="btn" id="copyApex">Copy table</button></div>
-      <p class="hint">Highest point of each visible trace inside the zoomed time range. Drag across the plot to zoom onto one peak; double-click to reset.</p>
+      <p class="hint">Highest point of each visible trace inside the zoomed time range. Scroll (or drag a box) over the plot to zoom onto one peak; double-click or “Reset zoom” to go back.</p>
       <div class="tbl"><table id="apexTbl"></table></div>
     </section>
     <section class="card">
@@ -246,15 +247,15 @@ const guessBio = n => n.replace(/_\d+$/, "") || n;   // HumanCtrl_1 & _2 -> same
 
 /* ================= state ================= */
 let RUNS = [], METHODS = [], METALS = [], BATCHLOG = {}, LABEL = "";
-const S = { method: null, metals: new Set(), blank: "nearest", unit: "min", y: "linear", view: "runs", showBlanks: false,
+const S = { zoom: "x", method: null, metals: new Set(), blank: "nearest", unit: "min", y: "linear", view: "runs", showBlanks: false,
   hidden: new Set(), marks: [], selected: null };
 const store = {
   get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} },
   del(k) { try { localStorage.removeItem(k); } catch (e) {} },
 };
-Object.assign(S, (({ blank, unit, y }) => ({ ...(blank && { blank }), ...(unit && { unit }), ...(y && { y }) }))(store.get("icpms-viewer", {})));
-const savePrefs = () => store.set("icpms-viewer", { blank: S.blank, unit: S.unit, y: S.y });
+Object.assign(S, (({ blank, unit, y, zoom }) => ({ ...(blank && { blank }), ...(unit && { unit }), ...(y && { y }), ...(zoom && { zoom }) }))(store.get("icpms-viewer", {})));
+const savePrefs = () => store.set("icpms-viewer", { blank: S.blank, unit: S.unit, y: S.y, zoom: S.zoom });
 const editKey = () => "icpms-edits:" + LABEL;
 let EDITS = {};
 const META = ["role", "type", "bio", "blankUse", "include"];
@@ -426,6 +427,7 @@ function buildControls() {
   seg("blankSeg", [["off", "Off"], ["mean", "Mean of blanks"], ["nearest", "Nearest prior"]], "blank", () => { buildControls(); buildManager(); });
   seg("unitSeg", [["s", "Seconds"], ["min", "Minutes"]], "unit");
   seg("ySeg", [["linear", "Linear"], ["log", "Log"]], "y");
+  seg("zoomSeg", [["x", "Time (X)"], ["y", "Intensity (Y)"], ["xy", "Both"]], "zoom");
   seg("viewSeg", [["runs", "Each run"], ["type", "Mean by type"], ["order", "Run order"]], "view", () => { xRange = null; buildControls(); });
   seg("showBlankSeg", [[false, "Hide"], [true, "Show raw"]], "showBlanks");
   const order = S.view === "order";
@@ -587,6 +589,52 @@ function openInfo(name, keepFocus) {
   if (!keepFocus) document.getElementById("closeSheet").focus();
 }
 
+/* ================= zoom ================= */
+// Scroll/pinch and box-zoom act only on the axes picked in "Zoom & scroll acts on".
+// In Time (X) mode each panel's Y range re-fits to the data inside the visible time window.
+const PLOT_CONFIG = { responsive: true, displaylogo: false, scrollZoom: true,
+  modeBarButtonsToRemove: ["lasso2d", "select2d", "autoScale2d", "zoomIn2d", "zoomOut2d"] };
+const uirev = () => [S.view, S.method, S.unit, S.y, S.zoom, [...S.metals].join()].join("|");
+function zoomAxes(layout) {
+  layout.uirevision = uirev(); layout.dragmode = "zoom";
+  Object.keys(layout).forEach(k => {
+    if (/^xaxis\d*$/.test(k)) layout[k].fixedrange = S.zoom === "y";
+    if (/^yaxis\d*$/.test(k)) layout[k].fixedrange = S.zoom === "x";
+  });
+}
+let fitting = false;
+function fitY() {
+  if (S.zoom !== "x" || !CURRENT.length) return;
+  const gd = document.getElementById("plot"); if (!gd.layout) return;
+  const upd = {};
+  if (!xRange) {
+    Object.keys(gd.layout).filter(k => /^yaxis\d*$/.test(k)).forEach(k => upd[k + ".autorange"] = true);
+  } else {
+    const [a, b] = xRange, ext = {};
+    CURRENT.forEach(s => {
+      const ya = s.ya || "y"; const e = ext[ya] || (ext[ya] = [Infinity, -Infinity]);
+      for (let i = 0; i < s.t.length; i++) if (s.t[i] >= a && s.t[i] <= b) {
+        const hi = s.y[i] + (s.sd ? s.sd[i] : 0), lo = s.y[i] - (s.sd ? s.sd[i] : 0);
+        if (S.y === "log") { if (lo > 0) e[0] = Math.min(e[0], lo); else if (s.y[i] > 0) e[0] = Math.min(e[0], s.y[i]); if (hi > 0) e[1] = Math.max(e[1], hi); }
+        else { e[0] = Math.min(e[0], lo); e[1] = Math.max(e[1], hi); }
+      }
+    });
+    Object.entries(ext).forEach(([ya, [lo, hi]]) => {
+      if (!isFinite(lo) || !isFinite(hi)) return;
+      const key = "yaxis" + ya.slice(1);
+      if (S.y === "log") { const l = Math.log10(lo), h = Math.log10(hi), p = (h - l || 1) * 0.06; upd[key + ".range"] = [l - p, h + p]; }
+      else { const p = (hi - lo || Math.abs(hi) || 1) * 0.06; upd[key + ".range"] = [lo - p, hi + p]; }
+    });
+  }
+  fitting = true; Plotly.relayout(gd, upd).then(() => fitting = false, () => fitting = false);
+}
+function afterDraw() { if (S.zoom === "x" && xRange) fitY(); }
+document.getElementById("resetZoom").onclick = () => {
+  xRange = null; const gd = document.getElementById("plot"); if (!gd.layout) return;
+  const upd = {}; Object.keys(gd.layout).filter(k => /^[xy]axis\d*$/.test(k)).forEach(k => upd[k + ".autorange"] = true);
+  Plotly.relayout(gd, upd); updateApex();
+};
+
 /* ================= main plot ================= */
 let CURRENT = [], xRange = null;
 function computeSeries() {
@@ -657,10 +705,12 @@ function render() {
       type: S.y, gridcolor: grid, linecolor: line, zerolinecolor: line, exponentformat: "SI",
       showspikes: true, spikemode: "across", spikesnap: "cursor", spikecolor: ink2, spikethickness: 1, spikedash: "dot" };
   });
+  CURRENT.forEach(s => s.ya = "y" + (metals.indexOf(s.metal) ? metals.indexOf(s.metal) + 1 : ""));
+  zoomAxes(layout);
   S.marks.forEach(mk => { const i = metals.indexOf(mk.metal); if (i < 0) return;
     traces.push({ type: "scatter", mode: "markers", showlegend: false, hoverinfo: "skip", x: [tx(mk.t)], y: [mk.y], xaxis: "x", yaxis: "y" + (i ? i + 1 : ""),
       marker: { size: 10, color: panel, line: { color: ink, width: 2 } } }); });
-  Plotly.react("plot", traces, layout, { responsive: true, displaylogo: false, modeBarButtonsToRemove: ["lasso2d", "select2d", "autoScale2d"] });
+  Plotly.react("plot", traces, layout, PLOT_CONFIG); afterDraw();
   updateApex(); drawMarks();
 }
 
@@ -715,9 +765,10 @@ function renderOrder() {
   S.marks.forEach(mk => { const s = CURRENT.find(c => c.label === mk.label && c.metal === mk.metal); if (!s) return;
     traces.push({ type: "scatter", mode: "markers", hoverinfo: "skip", x: [tx(mk.t)], y: [mk.y], xaxis: s.xa, yaxis: s.ya,
       marker: { size: 9, color: panel, line: { color: ink, width: 2 } } }); });
+  zoomAxes(layout);
   document.getElementById("blankNote").textContent =
     `All ${used().length} included runs in the order they were acquired, raw CPS (no blank subtraction), each panel on its own scale. Shaded rows are blanks; the grey band is the peak window used below.`;
-  Plotly.react("plot", traces, layout, { responsive: true, displaylogo: false, modeBarButtonsToRemove: ["lasso2d", "select2d", "autoScale2d"] });
+  Plotly.react("plot", traces, layout, PLOT_CONFIG); afterDraw();
   updateApex(); drawMarks(); renderCarry(metals);
 }
 function renderCarry(metals) {
@@ -774,7 +825,7 @@ function bindPlot() {
     if (keys.some(k => /^xaxis\d*\.autorange$/.test(k) && ev[k])) xRange = null;
     else if (r0) { const k = S.unit === "min" ? 60 : 1; xRange = [ev[r0] * k, ev[r0.replace("[0]", "[1]")] * k]; }
     else return;
-    updateApex();
+    updateApex(); if (!fitting) fitY();
   });
 }
 let APEX = [];

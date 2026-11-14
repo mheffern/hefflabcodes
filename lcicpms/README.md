@@ -35,7 +35,8 @@ Tap a sample name to see its CSV header, batch-log entry and raw signal summary.
 (off / mean / nearest prior), seconds vs minutes, linear/log, each run vs mean by type, raw blanks.
 **Run order** shows every run in acquisition order (blanks shaded) with a carryover table
 (blank peak-window area as % of the run before it) and a background-through-the-queue chart.
-Hover for exact time + CPS, drag to zoom onto a peak and read apex times from the table,
+**Zoom & scroll acts on** Time (X), Intensity (Y) or Both; in Time mode each panel re-fits Y to the visible window.
+Hover for exact time + CPS, scroll or drag to zoom onto a peak and read apex times from the table,
 click to pin points; both tables copy as tab-separated text for Excel.
 
 To make a copy with a batch preloaded: `python lcicpms/make_viewer.py path/to/csv_folder`.
