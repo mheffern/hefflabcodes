@@ -12,6 +12,10 @@ python lcicpms/analyze_lcicpms.py path/to/csv_folder --blank-mode nearest --wind
 
 - `--blank-mode mean` – subtract the average of all blanks (default)
 - `--blank-mode nearest` – subtract the blank run just before each sample in the queue (drift/carryover)
+- Sample sheet columns: `sample, type, blank, include, bio_sample, blank_used`. Runs sharing a
+  `bio_sample` are technical replicates and are averaged before the mean/SD across biological samples
+  (`summary_by_type.csv`, `peak_areas_by_bio_sample.csv`). `blank_used`: auto, none, or blank name(s) joined by `;`.
+  The viewer's **Copy sample sheet** button produces this file.
 - `--window START END` – integrate only that retention-time range (seconds); repeatable.
   A straight local baseline between the window edges is also subtracted (`peak_area`),
   which removes leftover drift (e.g. Cu background falling over the day).
@@ -23,8 +27,11 @@ Outputs go to `csv_folder/results/`: `peak_areas.csv`, `summary_by_type.csv` (me
 
 ## Interactive viewer
 
-`viewer_template.html` is a standalone page: open it in a browser and use **Load CSV files…**
-(select all the exports from one batch at once). Toggles: method, metals, blank subtraction
+`viewer_template.html` is a standalone page: open it in a browser, tap **Files & samples → Add files…**
+and select the exports from one batch (add BatchLog.csv too for queue comments).
+**Files & samples** lets you add/remove files, exclude runs, and set each run's role (sample/blank),
+type, biological sample (same value = technical replicate) and which blank to subtract.
+Tap a sample name to see its CSV header, batch-log entry and raw signal summary. Toggles: method, metals, blank subtraction
 (off / mean / nearest prior), seconds vs minutes, linear/log, each run vs mean by type, raw blanks.
 **Run order** shows every run in acquisition order (blanks shaded) with a carryover table
 (blank peak-window area as % of the run before it) and a background-through-the-queue chart.

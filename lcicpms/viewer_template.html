@@ -4,12 +4,13 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
 <script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>
 <style>
-/* Layout: instrument-software feel. Control rail on top, stacked metal panels, readout + peak tables below. */
+/* Layout: instrument-software feel. Header with file manager toggle, control rail, sample chips,
+   stacked metal panels, then readout tables. Sample info opens in a side sheet. */
 :root {
   --bg: #f6f7f9; --panel: #ffffff; --ink: #14171c; --ink-2: #4c5562; --ink-3: #7c8592;
   --line: #dde1e7; --grid: #eceef2; --accent: #0f6e8c; --accent-soft: #e2f0f4;
   --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4; --s6: #008300; --s7: #6250d6; --s8: #e34948;
-  --blank: #8a8f98; --warn: #a3520c;
+  --blank: #8a8f98; --warn: #a3520c; --scrim: rgba(20, 23, 28, .35);
   --font: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
 }
@@ -17,61 +18,95 @@
   --bg: #111418; --panel: #191d22; --ink: #eef1f4; --ink-2: #b4bcc6; --ink-3: #848d99;
   --line: #2b3139; --grid: #232830; --accent: #5cc0dd; --accent-soft: #16323b;
   --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #0ca30c; --s7: #9085e9; --s8: #e66767;
-  --blank: #9aa1ab; --warn: #f0a640; color-scheme: dark; } }
+  --blank: #9aa1ab; --warn: #f0a640; --scrim: rgba(0, 0, 0, .55); color-scheme: dark; } }
 :root[data-theme="dark"] {
   --bg: #111418; --panel: #191d22; --ink: #eef1f4; --ink-2: #b4bcc6; --ink-3: #848d99;
   --line: #2b3139; --grid: #232830; --accent: #5cc0dd; --accent-soft: #16323b;
   --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #0ca30c; --s7: #9085e9; --s8: #e66767;
-  --blank: #9aa1ab; --warn: #f0a640; color-scheme: dark; }
+  --blank: #9aa1ab; --warn: #f0a640; --scrim: rgba(0, 0, 0, .55); color-scheme: dark; }
 body { background: var(--bg); color: var(--ink); font-family: var(--font); font-size: 14px; }
 .wrap { max-width: 1280px; margin: 0 auto; padding-block: 20px 40px;
   padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
   display: grid; gap: 16px; }
-header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; }
+header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }
 h1 { font-size: 20px; font-weight: 600; margin: 0; text-wrap: balance; }
+h2 { font-size: 14px; font-weight: 600; margin: 0 0 4px; }
+h3 { font-size: 12px; font-weight: 600; margin: 14px 0 6px; color: var(--ink-2); text-transform: uppercase; letter-spacing: .05em; }
 .sub { color: var(--ink-2); font-size: 13px; }
-.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px; min-width: 0; }
 .controls { display: flex; flex-wrap: wrap; gap: 14px 22px; align-items: flex-end; }
 .ctl { display: grid; gap: 6px; }
 .lbl { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-3); font-weight: 500; }
-.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
 .seg button { font: inherit; font-size: 13px; padding: 6px 11px; border: 0; background: transparent; color: var(--ink-2); cursor: pointer; }
 .seg button + button { border-left: 1px solid var(--line); }
 .seg button[aria-pressed="true"] { background: var(--accent); color: var(--panel); font-weight: 500; }
-button:focus-visible, label:focus-within { outline: 2px solid var(--accent); outline-offset: 1px; }
-.btn { font: inherit; font-size: 13px; padding: 6px 11px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--ink); cursor: pointer; }
+.seg button:disabled { opacity: .4; cursor: default; }
+button:focus-visible, select:focus-visible, input:focus-visible, label:focus-within { outline: 2px solid var(--accent); outline-offset: 1px; }
+.btn { font: inherit; font-size: 13px; padding: 6px 11px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--ink); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
 .btn:hover { border-color: var(--accent); }
+.btn[aria-expanded="true"] { background: var(--accent-soft); border-color: var(--accent); }
+.btns { display: flex; flex-wrap: wrap; gap: 6px; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
+.hint { color: var(--ink-3); font-size: 12.5px; margin: 0 0 10px; }
+.note { font-size: 12px; color: var(--ink-3); }
+.empty { color: var(--ink-3); font-size: 12.5px; padding: 6px 0; }
+input[type=file] { display: none; }
+.in, select.in { font: inherit; font-size: 12.5px; padding: 4px 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--panel); color: var(--ink); }
+.in.w { width: 120px; }
+.num-in { width: 72px; font-family: var(--mono); }
+
+/* samples */
 .samples { display: grid; gap: 10px; }
 .tgroup { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .tname { font-size: 12px; font-weight: 600; color: var(--ink-2); min-width: 110px; cursor: pointer; background: none; border: 0; padding: 2px 0; text-align: left; font-family: inherit; }
-.chip { display: inline-flex; align-items: center; gap: 6px; font: inherit; font-size: 12.5px; padding: 4px 9px; border-radius: 999px;
-  border: 1px solid var(--line); background: var(--panel); color: var(--ink); cursor: pointer; }
-.chip .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
-.chip[aria-pressed="false"] { color: var(--ink-3); background: transparent; }
-.chip[aria-pressed="false"] .dot { opacity: .25; }
-.chip.dashed .dot { box-shadow: 0 0 0 2px var(--panel), 0 0 0 3px currentColor; }
+.chip { display: inline-flex; align-items: stretch; border: 1px solid var(--line); border-radius: 999px; background: var(--panel); overflow: hidden; }
+.chip button { font: inherit; font-size: 12.5px; border: 0; background: transparent; color: var(--ink); cursor: pointer; padding: 4px 9px; display: inline-flex; align-items: center; }
+.chip .vis { padding: 4px 4px 4px 9px; }
+.chip .nm { padding-left: 6px; }
+.chip .nm:hover { text-decoration: underline; }
+.chip.off .nm { color: var(--ink-3); }
+.chip.off svg { opacity: .25; }
+.chip.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+
+/* plot + tables */
 #plot { width: 100%; min-height: 420px; }
+.readout { font-family: var(--mono); font-size: 13px; color: var(--ink); margin-bottom: 8px; overflow-wrap: anywhere; }
 .split { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 @media (max-width: 860px) { .split { grid-template-columns: 1fr; } }
-h2 { font-size: 14px; font-weight: 600; margin: 0 0 4px; }
-.hint { color: var(--ink-3); font-size: 12.5px; margin: 0 0 10px; }
 .tbl { overflow-x: auto; }
 table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
 th { text-align: left; font-weight: 500; color: var(--ink-3); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
-td { padding: 5px 8px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+td { padding: 5px 8px; border-bottom: 1px solid var(--grid); white-space: nowrap; vertical-align: middle; }
 td.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
-td .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
-.readout { font-family: var(--mono); font-size: 13px; color: var(--ink); margin-bottom: 8px; }
-.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
-.empty { color: var(--ink-3); font-size: 12.5px; padding: 6px 0; }
-.x { background: none; border: 0; color: var(--ink-3); cursor: pointer; font-size: 14px; padding: 0 4px; }
-.x:hover { color: var(--ink); }
-.note { font-size: 12px; color: var(--ink-3); }
-.num-in { width: 72px; font: inherit; font-family: var(--mono); font-size: 13px; padding: 5px 7px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--ink); }
 td.hi { color: var(--warn); font-weight: 600; }
-.seg button:disabled { opacity: .4; cursor: default; }
-input[type=file] { display: none; }
+td .dot, .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+tr.excluded td { color: var(--ink-3); }
+tr.excluded td .in { opacity: .5; }
+.link { background: none; border: 0; padding: 0; font: inherit; color: var(--accent); cursor: pointer; text-align: left; }
+.link:hover { text-decoration: underline; }
+.x { background: none; border: 0; color: var(--ink-3); cursor: pointer; font-size: 15px; padding: 0 4px; }
+.x:hover { color: var(--ink); }
+.pill { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); color: var(--ink-2); }
+.pill.bio { border-color: var(--accent); color: var(--accent); }
+.pill.blank { background: var(--accent-soft); border-color: transparent; color: var(--ink-2); }
+.status { font-size: 12.5px; color: var(--ink-2); min-height: 1em; }
+
+/* sample info sheet */
+.scrim { position: fixed; inset: 0; background: var(--scrim); z-index: 20; }
+.sheet { position: fixed; z-index: 21; background: var(--panel); border-left: 1px solid var(--line); overflow-y: auto;
+  top: 0; right: 0; bottom: 0; width: min(440px, 100%);
+  padding: calc(16px + env(safe-area-inset-top, 0px)) calc(18px + env(safe-area-inset-right, 0px)) calc(24px + env(safe-area-inset-bottom, 0px)) 18px; }
+@media (max-width: 600px) { .sheet { top: auto; left: 0; width: auto; max-height: 82%; border-left: 0; border-top: 1px solid var(--line);
+  border-radius: 12px 12px 0 0; padding-left: calc(16px + env(safe-area-inset-left, 0px)); } }
+pre.raw { font-family: var(--mono); font-size: 11.5px; background: var(--bg); border: 1px solid var(--line); border-radius: 6px;
+  padding: 8px 10px; margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+dl.kv { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 0; font-size: 12.5px; }
+dl.kv dt { color: var(--ink-3); }
+dl.kv dd { margin: 0; overflow-wrap: anywhere; }
+.form { display: grid; grid-template-columns: max-content 1fr; gap: 8px 12px; align-items: start; font-size: 12.5px; }
+.form label { padding-top: 5px; }
+.form label { color: var(--ink-3); }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 
@@ -81,9 +116,30 @@ input[type=file] { display: none; }
       <h1>LC-ICP-MS Trace Viewer</h1>
       <div class="sub" id="batchInfo">No data loaded</div>
     </div>
-    <label class="btn" for="files" id="loadBtn">Load CSV files…</label>
-    <input type="file" id="files" accept=".csv,text/csv" multiple>
+    <div class="btns">
+      <button class="btn" id="mgrBtn" aria-expanded="false" aria-controls="mgr">Files &amp; samples</button>
+    </div>
   </header>
+
+  <!-- File & sample manager (toggle) -->
+  <section class="card" id="mgr" hidden aria-label="Files and samples">
+    <div class="row" style="align-items:flex-start">
+      <div style="min-width:0;flex:1 1 320px">
+        <h2>Files &amp; samples</h2>
+        <p class="hint" style="margin:0">Add or remove files without reloading the batch. Edit role, type, biological sample and blank for each run; edits are remembered in this browser.
+          Runs that share a <b>biological sample</b> are technical replicates (repeat injections of the same material); different biological samples within a type are biological replicates.</p>
+      </div>
+      <div class="btns">
+        <label class="btn" for="addFiles">Add files…</label><input type="file" id="addFiles" accept=".csv,text/csv" multiple>
+        <label class="btn" for="replaceFiles">Replace all…</label><input type="file" id="replaceFiles" accept=".csv,text/csv" multiple>
+        <button class="btn" id="copySheet">Copy sample sheet</button>
+        <button class="btn" id="resetEdits">Reset edits</button>
+      </div>
+    </div>
+    <div class="status" id="mgrStatus" role="status" style="margin-top:8px"></div>
+    <div class="tbl" style="margin-top:6px"><table id="mgrTbl"></table></div>
+    <p class="note" style="margin:8px 0 0">Tip: you can also add <code>BatchLog.csv</code> (queue comments, vial, result) and a <code>sample_sheet.csv</code> from the Python script; both are applied to the runs already loaded.</p>
+  </section>
 
   <section class="card controls" aria-label="Display options">
     <div class="ctl"><span class="lbl">Method</span><div class="seg" id="methodSeg"></div></div>
@@ -97,8 +153,8 @@ input[type=file] { display: none; }
 
   <section class="card" aria-label="Samples">
     <div class="row" style="margin-bottom:10px">
-      <span class="lbl">Samples — tap a chip to show/hide, tap a type name to toggle the whole type</span>
-      <span style="display:flex;gap:6px"><button class="btn" id="allOn">All</button><button class="btn" id="allOff">None</button></span>
+      <span class="lbl">Samples · tap the line swatch to show/hide · tap a name for file info · tap a type to toggle it</span>
+      <span class="btns"><button class="btn" id="allOn">All</button><button class="btn" id="allOff">None</button></span>
     </div>
     <div class="samples" id="samples"></div>
   </section>
@@ -111,10 +167,10 @@ input[type=file] { display: none; }
 
   <section class="card" id="carryCard" hidden aria-label="Carryover check">
     <div class="row" style="align-items:flex-end">
-      <div><h2>Carryover check</h2>
+      <div style="min-width:0;flex:1 1 320px"><h2>Carryover check</h2>
         <p class="hint" style="margin:0">Each blank's signal inside the peak window, as a % of the run injected just before it. Areas use a straight local baseline across the window, so baseline drift does not count as carryover.</p></div>
       <div class="ctl"><span class="lbl">Peak window (s)</span>
-        <span style="display:flex;gap:6px;align-items:center"><input id="winA" type="number" value="300" step="10" class="num-in" aria-label="Window start (s)"> to <input id="winB" type="number" value="550" step="10" class="num-in" aria-label="Window end (s)"></span></div>
+        <span style="display:flex;gap:6px;align-items:center"><input id="winA" type="number" value="300" step="10" class="in num-in" aria-label="Window start (s)"> to <input id="winB" type="number" value="550" step="10" class="in num-in" aria-label="Window end (s)"></span></div>
     </div>
     <div class="tbl" style="margin-top:10px"><table id="carryTbl"></table></div>
     <h2 style="margin-top:18px">Background through the queue</h2>
@@ -129,23 +185,35 @@ input[type=file] { display: none; }
       <div class="tbl"><table id="apexTbl"></table></div>
     </section>
     <section class="card">
-      <div class="row"><h2>Marked points</h2><span style="display:flex;gap:6px"><button class="btn" id="copyMarks">Copy table</button><button class="btn" id="clearMarks">Clear</button></span></div>
+      <div class="row"><h2>Marked points</h2><span class="btns"><button class="btn" id="copyMarks">Copy table</button><button class="btn" id="clearMarks">Clear</button></span></div>
       <p class="hint">Click any point on a trace to pin its exact time and intensity here.</p>
       <div class="tbl"><table id="markTbl"></table></div>
     </section>
   </div>
 </div>
 
+<div class="scrim" id="scrim" hidden></div>
+<aside class="sheet" id="sheet" hidden role="dialog" aria-modal="true" aria-labelledby="sheetTitle"></aside>
+
 <script>
 const EMBEDDED = /*__DATA__*/null;
 
-/* ---------- parsing (same rules as analyze_lcicpms.py) ---------- */
-function parseCsv(text, fname) {
+/* ================= parsing ================= */
+function splitCsvLine(line) {
+  const out = []; let cur = "", q = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (q) { if (ch === '"') { if (line[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += ch; }
+    else if (ch === '"') q = true; else if (ch === ",") { out.push(cur); cur = ""; } else cur += ch;
+  }
+  out.push(cur); return out;
+}
+function parseChromatogram(text, fname) {
   const lines = text.replace(/^﻿/, "").split(/\r?\n/);
-  let name = fname.replace(/\.csv$/i, ""), acquired = null, hdr = -1;
+  let name = fname.replace(/\.csv$/i, ""), acquired = null, hdr = -1, path = null;
   for (let i = 0; i < Math.min(20, lines.length); i++) {
     const first = lines[i].split(",")[0].trim();
-    if (/\.d$/i.test(first)) name = first.split(/[\\/]/).pop().slice(0, -2);
+    if (/\.d$/i.test(first)) { path = first; name = first.split(/[\\/]/).pop().slice(0, -2); }
     const m = lines[i].match(/(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})/);
     if (/acquired/i.test(lines[i]) && m) acquired = m[1];
     if (/^time/i.test(first)) { hdr = i; break; }
@@ -153,44 +221,117 @@ function parseCsv(text, fname) {
   if (hdr < 0) return null;
   let cols = lines[hdr].split(",").map(s => s.trim());
   while (cols.length && !cols[cols.length - 1]) cols.pop();
-  const data = cols.map(() => []);
+  const data = cols.map(() => []); let end = lines.length;
   for (let i = hdr + 1; i < lines.length; i++) {
     const p = lines[i].split(",").slice(0, cols.length).map(s => s.trim());
-    if (p.length < cols.length || p.some(v => v === "" || isNaN(+v))) break;
+    if (p.length < cols.length || p.some(v => v === "" || isNaN(+v))) { end = i; break; }
     p.forEach((v, j) => data[j].push(+v));
   }
-  const run = { name, acquired, t: data[0], metals: {} };
+  if (!data[0].length) return null;
+  const run = { file: fname, name, path, acquired, t: data[0], metals: {}, columns: cols,
+    header: lines.slice(0, hdr + 1).map(l => l.replace(/,+\s*$/, "")),
+    footer: lines.slice(end).map(l => l.trim()).filter(Boolean) };
   cols.slice(1).forEach((c, j) => run.metals[c] = data[j + 1]);
   return run;
 }
-const isBlank = n => /blank/i.test(n);
-const guessType = n => isBlank(n) ? "Blank" : (n.replace(/_\d+$/, "").replace(/-\d+$/, "") || n);
+function parseTable(text) {
+  const lines = text.replace(/^﻿/, "").split(/\r?\n/).filter(l => l.trim());
+  if (!lines.length) return null;
+  const head = splitCsvLine(lines[0]).map(s => s.trim());
+  return { head, rows: lines.slice(1).map(l => { const c = splitCsvLine(l); const o = {}; head.forEach((h, i) => o[h] = (c[i] ?? "").trim()); return o; }) };
+}
+const isBlankName = n => /blank/i.test(n);
+const guessType = n => isBlankName(n) ? "Blank" : (n.replace(/_\d+$/, "").replace(/-\d+$/, "") || n);
+const guessBio = n => n.replace(/_\d+$/, "") || n;   // HumanCtrl_1 & _2 -> same material; NASH-01_1 -> NASH-01
 
-/* ---------- state ---------- */
-let RUNS = [], METHODS = [], METALS = [];
-const S = { method: null, metals: new Set(), blank: "nearest", unit: "min", y: "linear", view: "runs", showBlanks: false, hidden: new Set(), marks: [] };
-try { const saved = JSON.parse(localStorage.getItem("icpms-viewer") || "{}"); Object.assign(S, { blank: saved.blank || S.blank, unit: saved.unit || S.unit, y: saved.y || S.y }); } catch (e) {}
-const save = () => { try { localStorage.setItem("icpms-viewer", JSON.stringify({ blank: S.blank, unit: S.unit, y: S.y })); } catch (e) {} };
+/* ================= state ================= */
+let RUNS = [], METHODS = [], METALS = [], BATCHLOG = {}, LABEL = "";
+const S = { method: null, metals: new Set(), blank: "nearest", unit: "min", y: "linear", view: "runs", showBlanks: false,
+  hidden: new Set(), marks: [], selected: null };
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} },
+  del(k) { try { localStorage.removeItem(k); } catch (e) {} },
+};
+Object.assign(S, (({ blank, unit, y }) => ({ ...(blank && { blank }), ...(unit && { unit }), ...(y && { y }) }))(store.get("icpms-viewer", {})));
+const savePrefs = () => store.set("icpms-viewer", { blank: S.blank, unit: S.unit, y: S.y });
+const editKey = () => "icpms-edits:" + LABEL;
+let EDITS = {};
+const META = ["role", "type", "bio", "blankUse", "include"];
+function saveEdit(run) { EDITS[run.name] = Object.fromEntries(META.map(k => [k, run[k]])); store.set(editKey(), EDITS); }
+function defaults(run) {
+  run.role = isBlankName(run.name) ? "blank" : "sample";
+  run.type = guessType(run.name); run.bio = guessBio(run.name); run.blankUse = "auto"; run.include = true;
+}
+function applyEdits(run) { const e = EDITS[run.name]; if (e) META.forEach(k => { if (e[k] !== undefined) run[k] = e[k]; }); }
 
-function loadRuns(runs, label) {
-  runs.forEach(r => {
-    r.type = r.type || guessType(r.name);
-    r.blank = r.blank ?? isBlank(r.name);
-    r.method = Math.round(r.t[r.t.length - 1] / 10) * 10;
+function setStatus(msg) { document.getElementById("mgrStatus").textContent = msg; }
+
+/* add or replace files */
+async function ingest(files, replace) {
+  const texts = await Promise.all(files.map(async f => ({ name: f.name, text: typeof f.text === "string" ? f.text : await f.text() })));
+  if (replace) { RUNS = []; BATCHLOG = {}; S.marks = []; S.hidden = new Set(); xRange = null; }
+  let added = 0, replaced = 0, sheets = 0, logs = 0; const skipped = [];
+  const pendingSheets = [];
+  for (const f of texts) {
+    const run = parseChromatogram(f.text, f.name);
+    if (run) {
+      defaults(run); applyEdits(run);
+      const i = RUNS.findIndex(r => r.name === run.name);
+      if (i >= 0) { RUNS[i] = run; replaced++; } else { RUNS.push(run); added++; }
+      continue;
+    }
+    const tb = parseTable(f.text);
+    if (tb && tb.head.includes("File Name") && tb.head.includes("Acquisition Result")) {
+      tb.rows.forEach(r => { if (r["Acquisition Result"] !== "Pass") return;
+        const n = r["File Name"].split(/[\\/]/).pop().replace(/\.d$/i, ""); BATCHLOG[n] = r; });
+      logs++; continue;
+    }
+    if (tb && tb.head.map(h => h.toLowerCase()).includes("sample") && tb.head.map(h => h.toLowerCase()).includes("type")) { pendingSheets.push(tb); sheets++; continue; }
+    skipped.push(f.name);
+  }
+  pendingSheets.forEach(applySheet);
+  finishLoad();
+  const bits = [];
+  if (added) bits.push(`${added} run(s) added`); if (replaced) bits.push(`${replaced} replaced`);
+  if (logs) bits.push("batch log read"); if (sheets) bits.push("sample sheet applied");
+  if (skipped.length) bits.push(`skipped ${skipped.join(", ")} (not a chromatogram, batch log or sample sheet)`);
+  setStatus(bits.join(" · ") || "Nothing loaded.");
+}
+function applySheet(tb) {
+  const lc = o => Object.fromEntries(Object.entries(o).map(([k, v]) => [k.toLowerCase(), v]));
+  const yes = v => /^(yes|y|true|1)$/i.test(v || "");
+  tb.rows.map(lc).forEach(r => {
+    const run = RUNS.find(x => x.name === r.sample); if (!run) return;
+    if (r.type) run.type = r.type;
+    if (r.blank !== undefined && r.blank !== "") run.role = yes(r.blank) ? "blank" : "sample";
+    if (r.include !== undefined && r.include !== "") run.include = yes(r.include);
+    if (r.bio_sample) run.bio = r.bio_sample;
+    if (r.blank_used) run.blankUse = /^auto$/i.test(r.blank_used) ? "auto" : /^none$/i.test(r.blank_used) ? "none" : r.blank_used;
+    saveEdit(run);
   });
-  runs.sort((a, b) => (a.acquired || "").localeCompare(b.acquired || ""));
-  RUNS = runs;
-  METHODS = [...new Set(runs.map(r => r.method))].sort((a, b) => b - a);
-  METALS = [...new Set(runs.flatMap(r => Object.keys(r.metals)))];
-  S.method = METHODS[0]; S.metals = new Set(METALS); S.hidden = new Set(); S.marks = [];
-  document.getElementById("batchInfo").textContent =
-    `${label} · ${runs.length} runs · ${METALS.join(", ")}`;
-  buildControls(); render();
+}
+function finishLoad() {
+  RUNS.forEach(r => r.method = Math.round(r.t[r.t.length - 1] / 10) * 10);
+  RUNS.sort((a, b) => (a.acquired || "").localeCompare(b.acquired || "") || a.name.localeCompare(b.name));
+  METHODS = [...new Set(RUNS.map(r => r.method))].sort((a, b) => b - a);
+  const metals = [...new Set(RUNS.flatMap(r => Object.keys(r.metals)))];
+  const fresh = metals.filter(m => !METALS.includes(m));
+  METALS = metals; fresh.forEach(m => S.metals.add(m)); [...S.metals].forEach(m => !METALS.includes(m) && S.metals.delete(m));
+  if (!S.metals.size) METALS.forEach(m => S.metals.add(m));
+  if (!METHODS.includes(S.method)) S.method = METHODS[0];
+  document.getElementById("batchInfo").textContent = RUNS.length
+    ? `${LABEL} · ${RUNS.length} runs (${RUNS.filter(r => r.include).length} included) · ${METALS.join(", ")}`
+    : "No data loaded. Open Files & samples to add CSV exports.";
+  buildControls(); buildManager(); render();
 }
 
-/* ---------- helpers ---------- */
+/* ================= helpers ================= */
 const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
-const SLOTS = ["--s1","--s2","--s3","--s4","--s5","--s6","--s7","--s8"];
+const SLOTS = ["--s1", "--s2", "--s3", "--s4", "--s5", "--s6", "--s7", "--s8"];
+const DASHES = ["solid", "dash", "dot", "dashdot", "longdash", "longdashdot"];
+const SVG_DASH = { solid: "", dash: "5 3", dot: "1.5 2.5", dashdot: "5 2 1.5 2", longdash: "9 3", longdashdot: "9 2 1.5 2" };
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 function interp(x, xs, ys) {
   const out = new Array(x.length); let j = 0;
   for (let i = 0; i < x.length; i++) {
@@ -202,189 +343,349 @@ function interp(x, xs, ys) {
   }
   return out;
 }
-const methodRuns = () => RUNS.filter(r => r.method === S.method);
-const scopeRuns = () => S.view === "order" ? RUNS : methodRuns();
-function colorMap() {
-  // color follows type within the method (fixed order of first appearance), replicate #2+ dashed
-  const types = [...new Set(scopeRuns().filter(r => !r.blank).map(r => r.type))];
-  const byType = {}; types.forEach((t, i) => byType[t] = css(SLOTS[i % 8]));
-  const dash = {}; const seen = {};
-  scopeRuns().filter(r => !r.blank).forEach(r => { seen[r.type] = (seen[r.type] || 0) + 1; dash[r.name] = seen[r.type] > 1; });
-  return { types, byType, dash };
-}
-function blankFor(run, metal) {
-  const blanks = methodRuns().filter(r => r.blank);
-  if (S.blank === "off" || !blanks.length) return { y: null, used: [] };
-  let use = blanks;
-  if (S.blank === "nearest") {
-    const before = blanks.filter(b => (b.acquired || "") < (run.acquired || ""));
-    use = [before.length ? before[before.length - 1] : blanks[0]];
-  }
-  const arrs = use.map(b => interp(run.t, b.t, b.metals[metal]));
-  return { y: run.t.map((_, i) => arrs.reduce((s, a) => s + a[i], 0) / arrs.length), used: use.map(b => b.name) };
-}
+const used = () => RUNS.filter(r => r.include);
+const methodRuns = () => used().filter(r => r.method === S.method);
+const scopeRuns = () => S.view === "order" ? used() : methodRuns();
+const isBlank = r => r.role === "blank";
+const hhmm = r => r.acquired ? r.acquired.slice(11, 16) : "";
 const tx = t => S.unit === "min" ? t / 60 : t;
 const unitLbl = () => S.unit === "min" ? "min" : "s";
 const fmtT = t => S.unit === "min" ? (t / 60).toFixed(3) + " min" : t.toFixed(2) + " s";
 const fmtBoth = t => `${t.toFixed(2)} s · ${(t / 60).toFixed(3)} min`;
 const fmtC = v => Math.round(v).toLocaleString("en-US");
 
-/* ---------- controls ---------- */
+/* replicate structure: type -> bio sample -> injections */
+function structure(runs) {
+  const types = [], byType = {}, bioIdx = {}, techIdx = {}, techN = {}, bioN = {};
+  runs.filter(r => !isBlank(r)).forEach(r => {
+    if (!byType[r.type]) { byType[r.type] = []; types.push(r.type); }
+    byType[r.type].push(r);
+  });
+  types.forEach(ty => {
+    const bios = [...new Set(byType[ty].map(r => r.bio))]; bioN[ty] = bios.length;
+    byType[ty].forEach(r => {
+      bioIdx[r.name] = bios.indexOf(r.bio);
+      const same = byType[ty].filter(x => x.bio === r.bio);
+      techIdx[r.name] = same.indexOf(r); techN[r.name] = same.length;
+    });
+  });
+  return { types, byType, bioIdx, techIdx, techN, bioN };
+}
+function colorMap() {
+  const st = structure(scopeRuns());
+  const color = {}; st.types.forEach((t, i) => color[t] = css(SLOTS[i % 8]));
+  const dash = {}; Object.keys(st.bioIdx).forEach(n => dash[n] = DASHES[st.bioIdx[n] % DASHES.length]);
+  return { ...st, color, dash };
+}
+function repLabel(r, st) {
+  if (isBlank(r)) return "";
+  const nb = st.bioN[r.type], nt = st.techN[r.name];
+  return nt > 1 ? `technical ${st.techIdx[r.name] + 1}/${nt}` + (nb > 1 ? ` · bio ${st.bioIdx[r.name] + 1}/${nb}` : "")
+                : nb > 1 ? `biological ${st.bioIdx[r.name] + 1}/${nb}` : "single";
+}
+function swatch(color, dash, w = 22) {
+  return `<svg width="${w}" height="10" aria-hidden="true"><line x1="1" y1="5" x2="${w - 1}" y2="5" stroke="${color}" stroke-width="2.4" stroke-linecap="round" stroke-dasharray="${SVG_DASH[dash] || ""}"/></svg>`;
+}
+
+/* blank resolution */
+function blanksFor(run) {
+  if (S.blank === "off" || isBlank(run) || run.blankUse === "none") return [];
+  const pool = used().filter(r => isBlank(r) && r.method === run.method);
+  if (run.blankUse && run.blankUse !== "auto") {
+    const b = RUNS.find(r => r.name === run.blankUse && r.include);
+    return b ? [b] : [];
+  }
+  if (!pool.length) return [];
+  if (S.blank === "mean") return pool;
+  const before = pool.filter(b => (b.acquired || "") < (run.acquired || ""));
+  return [before.length ? before[before.length - 1] : pool[0]];
+}
+function blankTrace(run, metal) {
+  const bl = blanksFor(run); if (!bl.length) return { y: null, used: [] };
+  const arrs = bl.map(b => interp(run.t, b.t, b.metals[metal] || b.t.map(() => 0)));
+  return { y: run.t.map((_, i) => arrs.reduce((s, a) => s + a[i], 0) / arrs.length), used: bl.map(b => b.name) };
+}
+
+/* ================= controls ================= */
 function seg(id, opts, key, after) {
   const el = document.getElementById(id); el.innerHTML = "";
   opts.forEach(([val, label]) => {
     const b = document.createElement("button"); b.type = "button"; b.textContent = label;
-    const on = key === "metals" ? S.metals.has(val) : S[key] === val;
-    b.setAttribute("aria-pressed", on);
+    b.setAttribute("aria-pressed", key === "metals" ? S.metals.has(val) : S[key] === val);
     b.onclick = () => {
       if (key === "metals") { S.metals.has(val) ? (S.metals.size > 1 && S.metals.delete(val)) : S.metals.add(val); }
       else S[key] = val;
-      save(); (after || buildControls)(); render();
+      savePrefs(); (after || buildControls)(); render();
     };
     el.appendChild(b);
   });
 }
 function buildControls() {
-  seg("methodSeg", METHODS.map(m => [m, `${m} s method · ${RUNS.filter(r => r.method === m).length} runs`]), "method", () => { xRange = null; buildControls(); });
+  seg("methodSeg", METHODS.map(m => [m, `${m} s method · ${used().filter(r => r.method === m).length} runs`]), "method", () => { xRange = null; buildControls(); });
   seg("metalSeg", METALS.map(m => [m, m]), "metals");
-  seg("blankSeg", [["off","Off"],["mean","Mean of blanks"],["nearest","Nearest prior"]], "blank");
-  seg("unitSeg", [["s","Seconds"],["min","Minutes"]], "unit");
-  seg("ySeg", [["linear","Linear"],["log","Log"]], "y");
-  seg("viewSeg", [["runs","Each run"],["type","Mean by type"],["order","Run order"]], "view", () => { xRange = null; buildControls(); });
-  seg("showBlankSeg", [[false,"Hide"],[true,"Show raw"]], "showBlanks");
+  seg("blankSeg", [["off", "Off"], ["mean", "Mean of blanks"], ["nearest", "Nearest prior"]], "blank", () => { buildControls(); buildManager(); });
+  seg("unitSeg", [["s", "Seconds"], ["min", "Minutes"]], "unit");
+  seg("ySeg", [["linear", "Linear"], ["log", "Log"]], "y");
+  seg("viewSeg", [["runs", "Each run"], ["type", "Mean by type"], ["order", "Run order"]], "view", () => { xRange = null; buildControls(); });
+  seg("showBlankSeg", [[false, "Hide"], [true, "Show raw"]], "showBlanks");
   const order = S.view === "order";
   ["methodSeg", "blankSeg", "showBlankSeg"].forEach(id => document.querySelectorAll(`#${id} button`).forEach(b => b.disabled = order));
   document.getElementById("carryCard").hidden = !order;
   buildChips();
 }
 function buildChips() {
-  const { types, byType, dash } = colorMap();
+  const st = colorMap();
   const box = document.getElementById("samples"); box.innerHTML = "";
-  types.forEach(ty => {
+  if (!RUNS.length) { box.innerHTML = `<div class="empty">No runs loaded yet.</div>`; return; }
+  st.types.forEach(ty => {
     const g = document.createElement("div"); g.className = "tgroup";
-    const tn = document.createElement("button"); tn.className = "tname"; tn.type = "button"; tn.textContent = ty;
-    const members = scopeRuns().filter(r => !r.blank && r.type === ty);
+    const tn = document.createElement("button"); tn.className = "tname"; tn.type = "button";
+    const members = st.byType[ty];
+    tn.textContent = `${ty}`; tn.title = `${st.bioN[ty]} biological sample(s), ${members.length} injection(s). Tap to show/hide all.`;
     tn.onclick = () => { const anyOn = members.some(r => !S.hidden.has(r.name));
       members.forEach(r => anyOn ? S.hidden.add(r.name) : S.hidden.delete(r.name)); buildChips(); render(); };
     g.appendChild(tn);
-    members.forEach(r => {
-      const c = document.createElement("button"); c.type = "button"; c.className = "chip" + (dash[r.name] ? " dashed" : "");
-      c.setAttribute("aria-pressed", !S.hidden.has(r.name));
-      c.innerHTML = `<span class="dot" style="background:${byType[ty]};color:${byType[ty]}"></span>${r.name}`;
-      c.title = r.acquired ? `Acquired ${r.acquired}` : "";
-      c.onclick = () => { S.hidden.has(r.name) ? S.hidden.delete(r.name) : S.hidden.add(r.name); buildChips(); render(); };
-      g.appendChild(c);
-    });
+    members.forEach(r => g.appendChild(chip(r, st.color[ty], st.dash[r.name], repLabel(r, st))));
     box.appendChild(g);
   });
-  const blanks = scopeRuns().filter(r => r.blank);
+  const blanks = scopeRuns().filter(isBlank);
   if (blanks.length) {
     const g = document.createElement("div"); g.className = "tgroup";
-    g.innerHTML = `<span class="tname" style="cursor:default">Blanks</span><span class="note">${blanks.map(b => `${b.name}${b.acquired ? " (" + b.acquired.slice(11, 16) + ")" : ""}`).join(" · ")}</span>`;
+    g.innerHTML = `<span class="tname" style="cursor:default">Blanks</span>`;
+    blanks.forEach(b => g.appendChild(chip(b, css("--blank"), "dash", `blank · ${hhmm(b)}`, true)));
     box.appendChild(g);
   }
+}
+function chip(r, color, dash, tip, noToggle) {
+  const c = document.createElement("span");
+  c.className = "chip" + (S.hidden.has(r.name) && !noToggle ? " off" : "") + (S.selected === r.name ? " sel" : "");
+  const v = document.createElement("button"); v.type = "button"; v.className = "vis"; v.innerHTML = swatch(color, dash);
+  v.setAttribute("aria-label", `${noToggle ? "Blank" : S.hidden.has(r.name) ? "Show" : "Hide"} ${r.name}`);
+  v.setAttribute("aria-pressed", !S.hidden.has(r.name));
+  if (noToggle) { v.disabled = true; v.style.cursor = "default"; }
+  else v.onclick = () => { S.hidden.has(r.name) ? S.hidden.delete(r.name) : S.hidden.add(r.name); buildChips(); render(); };
+  const n = document.createElement("button"); n.type = "button"; n.className = "nm"; n.textContent = r.name;
+  n.title = `${tip} · tap for file info`; n.onclick = () => openInfo(r.name);
+  c.append(v, n); return c;
 }
 document.getElementById("allOn").onclick = () => { S.hidden.clear(); buildChips(); render(); };
 document.getElementById("allOff").onclick = () => { scopeRuns().forEach(r => S.hidden.add(r.name)); buildChips(); render(); };
 
-/* ---------- traces ---------- */
-let CURRENT = []; // [{label, metal, color, t(sec), y}]
-function computeSeries() {
-  const { types, byType, dash } = colorMap(); const out = []; const notes = new Set();
-  const metals = METALS.filter(m => S.metals.has(m));
-  const vis = methodRuns().filter(r => !r.blank && !S.hidden.has(r.name));
-  metals.forEach(m => {
-    const corr = vis.map(r => { const b = blankFor(r, m); b.used.forEach(u => notes.add(`${r.name} − ${u}`));
-      return { r, y: b.y ? r.metals[m].map((v, i) => v - b.y[i]) : r.metals[m] }; });
-    if (S.view === "runs") {
-      corr.forEach(({ r, y }) => out.push({ label: r.name, type: r.type, metal: m, color: byType[r.type], dash: dash[r.name], t: r.t, y }));
-    } else {
-      types.forEach(ty => {
-        const grp = corr.filter(c => c.r.type === ty); if (!grp.length) return;
-        const t = grp[0].r.t;
-        const ys = grp.map(c => c.r.t === t ? c.y : interp(t, c.r.t, c.y));
-        const mean = t.map((_, i) => ys.reduce((s, a) => s + a[i], 0) / ys.length);
-        out.push({ label: `${ty} (n=${grp.length})`, type: ty, metal: m, color: byType[ty], dash: false, t, y: mean });
-      });
-    }
-    if (S.showBlanks) methodRuns().filter(r => r.blank).forEach(b =>
-      out.push({ label: `${b.name} (raw)`, type: "Blank", metal: m, color: css("--blank"), dash: true, t: b.t, y: b.metals[m], isBlank: true }));
+/* ================= file & sample manager ================= */
+const mgr = document.getElementById("mgr"), mgrBtn = document.getElementById("mgrBtn");
+mgrBtn.onclick = () => { mgr.hidden = !mgr.hidden; mgrBtn.setAttribute("aria-expanded", !mgr.hidden); if (!mgr.hidden) buildManager(); };
+function blankOptions(run) {
+  const pool = RUNS.filter(r => isBlank(r) && r.method === run.method && r.name !== run.name);
+  const auto = S.blank === "off" ? "Auto (subtraction off)" : S.blank === "mean" ? "Auto: mean of blanks" : "Auto: nearest prior";
+  return [["auto", auto], ["none", "None"], ...pool.map(b => [b.name, `${b.name} (${hhmm(b)})${b.include ? "" : " – excluded"}`])];
+}
+function buildManager() {
+  if (mgr.hidden) return;
+  const st = structure(used());
+  const tbl = document.getElementById("mgrTbl");
+  if (!RUNS.length) { tbl.innerHTML = `<tr><td class="empty">No files yet. Use “Add files…” and select the CSV exports from one batch.</td></tr>`; return; }
+  tbl.innerHTML = `<tr><th>Use</th><th>#</th><th>Time</th><th>Run</th><th>Method</th><th>Role</th><th>Type</th><th>Biological sample</th><th>Replicate</th><th>Blank subtracted</th><th></th></tr>` +
+    RUNS.map((r, i) => {
+      const resolved = r.include && !isBlank(r) ? blanksFor(r).map(b => b.name).join(" + ") || "none" : "";
+      return `<tr class="${r.include ? "" : "excluded"}" data-n="${esc(r.name)}">
+      <td><input type="checkbox" data-f="include" ${r.include ? "checked" : ""} aria-label="Use ${esc(r.name)}"></td>
+      <td class="num">${i + 1}</td><td class="num">${hhmm(r)}</td>
+      <td><button class="link" data-info="1">${esc(r.name)}</button></td>
+      <td class="num">${r.method} s</td>
+      <td><select class="in" data-f="role" aria-label="Role"><option value="sample" ${r.role === "sample" ? "selected" : ""}>Sample</option><option value="blank" ${isBlank(r) ? "selected" : ""}>Blank</option></select></td>
+      <td>${isBlank(r) ? `<span class="pill blank">blank</span>` : `<input class="in w" data-f="type" value="${esc(r.type)}" aria-label="Type">`}</td>
+      <td>${isBlank(r) ? "" : `<input class="in w" data-f="bio" value="${esc(r.bio)}" aria-label="Biological sample">`}</td>
+      <td>${isBlank(r) || !r.include ? "" : `<span class="pill ${/bio|single/.test(repLabel(r, st)) && !/technical/.test(repLabel(r, st)) ? "bio" : ""}">${repLabel(r, st)}</span>`}</td>
+      <td>${isBlank(r) ? "" : `<select class="in" data-f="blankUse" aria-label="Blank subtracted">${blankOptions(r).map(([v, l]) => `<option value="${esc(v)}" ${r.blankUse === v ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>
+        <div class="note">${resolved && r.blankUse === "auto" ? "→ " + esc(resolved) : ""}</div>`}</td>
+      <td><button class="x" data-rm="1" aria-label="Remove ${esc(r.name)}">×</button></td></tr>`;
+    }).join("");
+  tbl.querySelectorAll("tr[data-n]").forEach(tr => {
+    const run = RUNS.find(r => r.name === tr.dataset.n);
+    tr.querySelectorAll("[data-f]").forEach(el => el.addEventListener("change", () => {
+      const f = el.dataset.f; run[f] = el.type === "checkbox" ? el.checked : el.value.trim() || (f === "type" ? guessType(run.name) : f === "bio" ? guessBio(run.name) : el.value);
+      saveEdit(run); afterEdit();
+    }));
+    tr.querySelector("[data-info]").onclick = () => openInfo(run.name);
+    tr.querySelector("[data-rm]").onclick = () => { RUNS = RUNS.filter(r => r !== run); S.marks = S.marks.filter(m => m.label !== run.name);
+      setStatus(`Removed ${run.name}. Use “Add files…” to bring it back.`); finishLoad(); };
   });
-  const nb = methodRuns().filter(r => r.blank).length;
-  document.getElementById("blankNote").textContent = S.blank === "off" ? "Blank subtraction off: raw CPS shown."
-    : !nb ? "No blank runs in this method, so nothing is subtracted."
-    : S.blank === "mean" ? `Subtracting the average of ${nb} blank run(s) from this method.`
-    : "Subtracting the blank run acquired most recently before each sample: " + [...new Set([...notes].map(n => n.split(" − ")[1]))].join(", ") + ".";
-  return out;
+}
+function afterEdit() { finishLoad(); if (S.selected) openInfo(S.selected, true); }
+document.getElementById("addFiles").addEventListener("change", e => { const f = [...e.target.files]; e.target.value = ""; if (f.length) ingest(f, false); });
+document.getElementById("replaceFiles").addEventListener("change", e => { const f = [...e.target.files]; e.target.value = ""; if (f.length) { LABEL = `${f.length} file(s) from your computer`; EDITS = store.get(editKey(), {}); ingest(f, true); } });
+document.getElementById("resetEdits").onclick = e => {
+  const b = e.currentTarget;
+  if (b.dataset.armed !== "1") { b.dataset.armed = "1"; b.textContent = "Tap again to reset"; setTimeout(() => { b.dataset.armed = ""; b.textContent = "Reset edits"; }, 3000); return; }
+  b.dataset.armed = ""; b.textContent = "Reset edits";
+  EDITS = {}; store.del(editKey()); RUNS.forEach(defaults); setStatus("Edits reset to the names' defaults."); afterEdit();
+};
+document.getElementById("copySheet").onclick = e => {
+  const rows = [["sample", "type", "blank", "include", "bio_sample", "blank_used", "method"],
+    ...RUNS.map(r => [r.name, isBlank(r) ? "Blank" : r.type, isBlank(r) ? "yes" : "no", r.include ? "yes" : "no", isBlank(r) ? "" : r.bio, isBlank(r) ? "" : r.blankUse, `${r.method}s run`])];
+  copyText(rows.map(r => r.join("\t")).join("\n"), e.currentTarget);
+  setStatus("Copied. Paste into Excel and save as sample_sheet.csv next to your data; the Python script and this viewer both read it.");
+};
+
+/* ================= sample info sheet ================= */
+const sheet = document.getElementById("sheet"), scrim = document.getElementById("scrim");
+function closeInfo() { sheet.hidden = scrim.hidden = true; const was = S.selected; S.selected = null; buildChips();
+  const back = [...document.querySelectorAll(".chip .nm, #mgrTbl .link")].find(b => b.textContent === was); back?.focus(); }
+scrim.onclick = closeInfo;
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !sheet.hidden) closeInfo(); });
+function openInfo(name, keepFocus) {
+  const r = RUNS.find(x => x.name === name); if (!r) return closeInfo();
+  S.selected = name; const st = structure(used());
+  const log = BATCHLOG[r.name];
+  const peaks = Object.keys(r.metals).map(m => {
+    const y = r.metals[m]; let bi = 0; y.forEach((v, i) => { if (v > y[bi]) bi = i; });
+    const bgv = y.filter((_, i) => r.t[i] <= 60).sort((a, b) => a - b);
+    return `<tr><td>${m}</td><td class="num">${fmtC(y[bi])}</td><td class="num">${r.t[bi].toFixed(2)}</td><td class="num">${(r.t[bi] / 60).toFixed(3)}</td><td class="num">${fmtC(bgv[bgv.length >> 1] ?? 0)}</td></tr>`;
+  }).join("");
+  const logKeys = ["Sample Type", "Sample Name", "Vial#", "Acq. Date-Time", "Acquisition Result", "Comment", "Dilution Result", "Total Dil.", "Level", "Total Acq Time", "Operator"];
+  const sib = !isBlank(r) ? used().filter(x => x !== r && !isBlank(x) && x.type === r.type) : [];
+  sheet.innerHTML = `
+    <div class="row" style="flex-wrap:nowrap;align-items:flex-start">
+      <div style="min-width:0"><div class="lbl">${isBlank(r) ? "Blank" : esc(r.type)}${r.include ? "" : " · excluded"}</div><h2 id="sheetTitle" style="font-size:17px;margin:2px 0 0;overflow-wrap:anywhere">${esc(r.name)}</h2></div>
+      <button class="btn" id="closeSheet">Close</button>
+    </div>
+    <h3>File header</h3>
+    <pre class="raw">${esc(r.header.join("\n"))}${r.footer.length ? "\n…\n" + esc(r.footer.join("\n")) : ""}</pre>
+    <dl class="kv" style="margin-top:10px">
+      <dt>File</dt><dd>${esc(r.file)}</dd>
+      ${r.path ? `<dt>Instrument path</dt><dd class="mono" style="font-family:var(--mono);font-size:11.5px">${esc(r.path)}</dd>` : ""}
+      <dt>Acquired</dt><dd>${esc(r.acquired || "not in file")}</dd>
+      <dt>Queue position</dt><dd>#${RUNS.indexOf(r) + 1} of ${RUNS.length}</dd>
+      <dt>Run length</dt><dd>${r.t[r.t.length - 1].toFixed(1)} s (${(r.t[r.t.length - 1] / 60).toFixed(2)} min), ${r.t.length} points, every ${(r.t[1] - r.t[0]).toFixed(3)} s</dd>
+      <dt>Signals</dt><dd>${Object.keys(r.metals).join(", ")}</dd>
+    </dl>
+    ${log ? `<h3>Batch log entry</h3><dl class="kv">${logKeys.filter(k => log[k] && log[k] !== "-").map(k => `<dt>${esc(k)}</dt><dd>${esc(log[k])}</dd>`).join("")}</dl>`
+          : `<p class="note" style="margin-top:10px">Add <code>BatchLog.csv</code> in Files &amp; samples to see this run's queue comment, vial and result here.</p>`}
+    <h3>Settings for this run</h3>
+    <div class="form">
+      <label for="f_include">Use in analysis</label><span><input type="checkbox" id="f_include" ${r.include ? "checked" : ""}></span>
+      <label for="f_role">Role</label><select class="in" id="f_role"><option value="sample">Sample</option><option value="blank" ${isBlank(r) ? "selected" : ""}>Blank</option></select>
+      ${isBlank(r) ? "" : `
+      <label for="f_type">Type</label><input class="in" id="f_type" value="${esc(r.type)}">
+      <label for="f_bio">Biological sample</label><span><input class="in" id="f_bio" value="${esc(r.bio)}" list="bioList">
+        <datalist id="bioList">${[...new Set(sib.map(x => x.bio))].map(b => `<option value="${esc(b)}">`).join("")}</datalist>
+        <div class="note" style="margin-top:4px">${repLabel(r, st)}. Same value as another run = technical replicate (same material injected again); a different value = biological replicate.</div></span>
+      <label for="f_blank">Blank subtracted</label><span><select class="in" id="f_blank">${blankOptions(r).map(([v, l]) => `<option value="${esc(v)}" ${r.blankUse === v ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>
+        <div class="note" style="margin-top:4px">Currently: ${esc(blanksFor(r).map(b => b.name).join(" + ") || "none")}</div></span>`}
+    </div>
+    ${sib.length ? `<h3>Other ${esc(r.type)} runs</h3><div class="btns">${sib.map(x => `<button class="btn" data-go="${esc(x.name)}">${esc(x.name)} <span class="note">${x.bio === r.bio ? "tech" : "bio"}</span></button>`).join("")}</div>` : ""}
+    <h3>Raw signal summary</h3>
+    <div class="tbl"><table><tr><th>Signal</th><th style="text-align:right">Max CPS</th><th style="text-align:right">at (s)</th><th style="text-align:right">(min)</th><th style="text-align:right">Background*</th></tr>${peaks}</table></div>
+    <p class="note">*Median CPS over the first 60 s. Raw values, before blank subtraction.</p>`;
+  sheet.hidden = scrim.hidden = false; buildChips();
+  const bind = (id, f, get) => { const el = document.getElementById(id); if (el) el.onchange = () => { r[f] = get(el); saveEdit(r); afterEdit(); }; };
+  bind("f_include", "include", el => el.checked); bind("f_role", "role", el => el.value);
+  bind("f_type", "type", el => el.value.trim() || guessType(r.name)); bind("f_bio", "bio", el => el.value.trim() || guessBio(r.name));
+  bind("f_blank", "blankUse", el => el.value);
+  document.getElementById("closeSheet").onclick = closeInfo;
+  sheet.querySelectorAll("[data-go]").forEach(b => b.onclick = () => openInfo(b.dataset.go));
+  if (!keepFocus) document.getElementById("closeSheet").focus();
 }
 
-let xRange = null;
+/* ================= main plot ================= */
+let CURRENT = [], xRange = null;
+function computeSeries() {
+  const st = colorMap(); const out = [];
+  const metals = METALS.filter(m => S.metals.has(m));
+  const vis = methodRuns().filter(r => !isBlank(r) && !S.hidden.has(r.name));
+  metals.forEach(m => {
+    const corr = vis.filter(r => r.metals[m]).map(r => { const b = blankTrace(r, m);
+      return { r, y: b.y ? r.metals[m].map((v, i) => v - b.y[i]) : r.metals[m] }; });
+    if (S.view === "runs") {
+      corr.forEach(({ r, y }) => out.push({ label: r.name, metal: m, color: st.color[r.type], dash: st.dash[r.name], t: r.t, y }));
+    } else {
+      st.types.forEach(ty => {
+        const grp = corr.filter(c => c.r.type === ty); if (!grp.length) return;
+        const t = grp[0].r.t; const on = ys => ys.r.t === t ? ys.y : interp(t, ys.r.t, ys.y);
+        const avg = arrs => t.map((_, i) => arrs.reduce((s, a) => s + a[i], 0) / arrs.length);
+        const sd = (arrs, mu) => t.map((_, i) => Math.sqrt(arrs.reduce((s, a) => s + (a[i] - mu[i]) ** 2, 0) / Math.max(1, arrs.length - 1)));
+        const bios = [...new Set(grp.map(c => c.r.bio))];
+        const bioMeans = bios.map(b => avg(grp.filter(c => c.r.bio === b).map(on)));   // average technical reps first
+        const mean = avg(bioMeans);
+        const spread = bios.length > 1 ? sd(bioMeans, mean) : grp.length > 1 ? sd(grp.map(on), mean) : null;
+        out.push({ label: `${ty} (${bios.length} bio × ${grp.length} inj)`, metal: m, color: st.color[ty], dash: "solid", t, y: mean,
+          sd: spread, sdKind: bios.length > 1 ? "biological SD" : grp.length > 1 ? "technical SD" : "" });
+      });
+    }
+    if (S.showBlanks) methodRuns().filter(isBlank).forEach(b => b.metals[m] &&
+      out.push({ label: `${b.name} (raw)`, metal: m, color: css("--blank"), dash: "dash", t: b.t, y: b.metals[m], isBlank: true }));
+  });
+  const nb = methodRuns().filter(isBlank).length, custom = vis.filter(r => r.blankUse !== "auto").length;
+  document.getElementById("blankNote").textContent = (S.blank === "off" ? "Blank subtraction off: raw CPS shown."
+    : !nb && !custom ? "No blank runs in this method, so nothing is subtracted."
+    : S.blank === "mean" ? `Subtracting the average of ${nb} blank run(s) from this method.`
+    : "Subtracting the blank acquired most recently before each sample.")
+    + (custom && S.blank !== "off" ? ` ${custom} run(s) use a blank you chose in Files & samples.` : "")
+    + (S.view === "type" ? " Mean by type averages technical replicates first, then takes the mean across biological samples; the band is ±1 SD." : "");
+  return out;
+}
 function render() {
-  if (!RUNS.length) return;
+  if (!RUNS.length) { Plotly.purge("plot"); CURRENT = []; updateApex(); drawMarks(); return; }
   if (S.view === "order") return renderOrder();
   CURRENT = computeSeries();
   const metals = METALS.filter(m => S.metals.has(m));
   const ink = css("--ink"), ink2 = css("--ink-2"), grid = css("--grid"), line = css("--line"), panel = css("--panel");
-  const traces = CURRENT.map(s => ({
-    type: "scattergl", mode: "lines", name: s.label, legendgroup: s.label, showlegend: s.metal === metals[0],
-    x: s.t.map(tx), y: s.y, xaxis: "x", yaxis: "y" + (metals.indexOf(s.metal) ? metals.indexOf(s.metal) + 1 : ""),
-    line: { color: s.color, width: s.isBlank ? 1 : 1.6, dash: s.dash ? "dash" : "solid" },
-    hovertemplate: `${s.label} · ${s.metal}<br>%{x:.3f} ${unitLbl()} · %{y:,.0f} CPS<extra></extra>`,
-  }));
+  const traces = [];
+  CURRENT.forEach((s, idx) => {
+    const ya = "y" + (metals.indexOf(s.metal) ? metals.indexOf(s.metal) + 1 : "");
+    traces.push({ type: "scattergl", mode: "lines", name: s.label, showlegend: false, x: s.t.map(tx), y: s.y, xaxis: "x", yaxis: ya,
+      line: { color: s.color, width: s.isBlank ? 1 : 1.6, dash: s.dash },
+      hovertemplate: `${s.label} · ${s.metal}<br>%{x:.3f} ${unitLbl()} · %{y:,.0f} CPS<extra></extra>` });
+  });
+  // SD bands drawn after (so curveNumber of lines == index in CURRENT)
+  CURRENT.forEach(s => { if (!s.sd) return;
+    const ya = "y" + (metals.indexOf(s.metal) ? metals.indexOf(s.metal) + 1 : ""); const xs = s.t.map(tx);
+    traces.push({ type: "scatter", mode: "lines", x: [...xs, ...xs.slice().reverse()], y: [...s.y.map((v, i) => v + s.sd[i]), ...s.y.map((v, i) => v - s.sd[i]).reverse()],
+      fill: "toself", fillcolor: s.color + "33", line: { width: 0 }, hoverinfo: "skip", showlegend: false, xaxis: "x", yaxis: ya }); });
   const h = 1 / metals.length, gap = 0.06;
   const layout = {
     paper_bgcolor: panel, plot_bgcolor: panel, font: { family: css("--font"), color: ink2, size: 12 },
-    margin: { l: 70, r: 12, t: 8, b: 44 }, height: Math.max(420, 250 * metals.length + 60),
+    margin: { l: 70, r: 12, t: 8, b: 44 }, height: Math.max(420, 250 * metals.length + 60), showlegend: false,
     hovermode: "closest", dragmode: "zoom", hoverlabel: { font: { family: css("--mono"), size: 12 } },
-    showlegend: false,
     xaxis: { title: { text: `Retention time (${unitLbl()})` }, gridcolor: grid, linecolor: line, zeroline: false,
       showspikes: true, spikemode: "across", spikesnap: "cursor", spikecolor: ink2, spikethickness: 1, spikedash: "dot",
       range: xRange ? xRange.map(tx) : undefined, anchor: "y" + (metals.length > 1 ? metals.length : "") },
   };
   metals.forEach((m, i) => {
-    const key = "yaxis" + (i ? i + 1 : "");
     const top = 1 - i * h, bottom = top - h + (i < metals.length - 1 ? gap : 0);
-    layout[key] = { domain: [Math.max(0, bottom), top], title: { text: `${m} CPS`, font: { size: 12, color: ink } },
+    layout["yaxis" + (i ? i + 1 : "")] = { domain: [Math.max(0, bottom), top], title: { text: `${m} CPS`, font: { size: 12, color: ink } },
       type: S.y, gridcolor: grid, linecolor: line, zerolinecolor: line, exponentformat: "SI",
       showspikes: true, spikemode: "across", spikesnap: "cursor", spikecolor: ink2, spikethickness: 1, spikedash: "dot" };
   });
-  // overlay marks
-  layout.shapes = []; layout.annotations = [];
-  const markTr = { type: "scatter", mode: "markers", showlegend: false, hoverinfo: "skip", x: [], y: [], xaxis: "x",
-    marker: { size: 10, color: panel, line: { color: ink, width: 2 } } };
   S.marks.forEach(mk => { const i = metals.indexOf(mk.metal); if (i < 0) return;
-    traces.push({ ...markTr, x: [tx(mk.t)], y: [mk.y], yaxis: "y" + (i ? i + 1 : "") }); });
-  Plotly.react("plot", traces, layout, { responsive: true, displaylogo: false, scrollZoom: false,
-    modeBarButtonsToRemove: ["lasso2d", "select2d", "autoScale2d"] });
+    traces.push({ type: "scatter", mode: "markers", showlegend: false, hoverinfo: "skip", x: [tx(mk.t)], y: [mk.y], xaxis: "x", yaxis: "y" + (i ? i + 1 : ""),
+      marker: { size: 10, color: panel, line: { color: ink, width: 2 } } }); });
+  Plotly.react("plot", traces, layout, { responsive: true, displaylogo: false, modeBarButtonsToRemove: ["lasso2d", "select2d", "autoScale2d"] });
   updateApex(); drawMarks();
 }
 
-/* ---------- run order view (bleed-over / carryover) ---------- */
+/* ================= run order view ================= */
 function windowArea(t, y, a, b) {
-  // area inside [a,b] after subtracting a straight baseline between the window edges
   const idx = []; for (let i = 0; i < t.length; i++) if (t[i] >= a && t[i] <= b) idx.push(i);
   if (idx.length < 8) return null;
   const k = 5, med = arr => { const s = [...arr].sort((p, q) => p - q); return s[s.length >> 1]; };
   const head = idx.slice(0, k), tail = idx.slice(-k);
   const x0 = head.reduce((s, i) => s + t[i], 0) / k, x1 = tail.reduce((s, i) => s + t[i], 0) / k;
   const y0 = med(head.map(i => y[i])), y1 = med(tail.map(i => y[i]));
+  const base = x => y0 + (y1 - y0) * (x - x0) / (x1 - x0);
   let area = 0;
-  for (let j = 1; j < idx.length; j++) {
-    const i = idx[j], h = idx[j - 1];
-    const bi = y0 + (y1 - y0) * (t[i] - x0) / (x1 - x0), bh = y0 + (y1 - y0) * (t[h] - x0) / (x1 - x0);
-    area += 0.5 * ((y[i] - bi) + (y[h] - bh)) * (t[i] - t[h]);
-  }
+  for (let j = 1; j < idx.length; j++) { const i = idx[j], h = idx[j - 1];
+    area += 0.5 * ((y[i] - base(t[i])) + (y[h] - base(t[h]))) * (t[i] - t[h]); }
   return area;
 }
-const hhmm = r => r.acquired ? r.acquired.slice(11, 16) : "";
 function renderOrder() {
   const metals = METALS.filter(m => S.metals.has(m));
-  const { byType } = colorMap();
-  const rows = RUNS.filter(r => r.blank || !S.hidden.has(r.name));
+  const st = colorMap();
+  const rows = used().filter(r => isBlank(r) || !S.hidden.has(r.name));
   const ink = css("--ink"), ink2 = css("--ink-2"), ink3 = css("--ink-3"), grid = css("--grid"), line = css("--line"),
         panel = css("--panel"), soft = css("--accent-soft"), blankC = css("--blank");
   const wa = +document.getElementById("winA").value, wb = +document.getElementById("winB").value;
-  const nR = rows.length, nC = metals.length, rowH = 1 / nR, colW = 1 / nC, gx = nC > 1 ? 0.04 : 0, gy = Math.min(0.012, rowH * 0.18);
+  const nR = rows.length, nC = metals.length, rowH = 1 / Math.max(1, nR), colW = 1 / nC, gx = nC > 1 ? 0.04 : 0, gy = Math.min(0.012, rowH * 0.18);
   CURRENT = []; const traces = [];
   const layout = { paper_bgcolor: panel, plot_bgcolor: panel, font: { family: css("--font"), color: ink2, size: 11 },
     margin: { l: 56, r: 10, t: 26, b: 44 }, height: 86 * nR + 80, showlegend: false, hovermode: "closest",
@@ -393,109 +694,94 @@ function renderOrder() {
     x: c * colW + (colW - gx) / 2, y: 1, yanchor: "bottom", yshift: 6, showarrow: false, font: { size: 12, color: ink } }));
   rows.forEach((r, ri) => metals.forEach((m, c) => {
     const k = ri * nC + c + 1, xa = "x" + (k > 1 ? k : ""), ya = "y" + (k > 1 ? k : "");
-    const xk = "xaxis" + (k > 1 ? k : ""), yk = "yaxis" + (k > 1 ? k : "");
-    const top = 1 - ri * rowH, bottom = top - rowH + gy;
-    layout[xk] = { domain: [c * colW, (c + 1) * colW - gx], anchor: ya, matches: k > 1 ? "x" : undefined,
+    const top = 1 - ri * rowH, bottom = top - rowH + gy, q = used().indexOf(r) + 1;
+    layout["xaxis" + (k > 1 ? k : "")] = { domain: [c * colW, (c + 1) * colW - gx], anchor: ya, matches: k > 1 ? "x" : undefined,
       showticklabels: ri === nR - 1, gridcolor: grid, linecolor: line, zeroline: false, tickfont: { size: 10 },
       title: ri === nR - 1 ? { text: `Retention time (${unitLbl()})`, font: { size: 11 } } : undefined,
       showspikes: true, spikemode: "across", spikesnap: "cursor", spikecolor: ink2, spikethickness: 1, spikedash: "dot",
       range: xRange ? xRange.map(tx) : undefined };
-    layout[yk] = { domain: [bottom, top], anchor: xa, type: S.y, gridcolor: grid, linecolor: line, zerolinecolor: line,
+    layout["yaxis" + (k > 1 ? k : "")] = { domain: [bottom, top], anchor: xa, type: S.y, gridcolor: grid, linecolor: line, zerolinecolor: line,
       nticks: 3, tickfont: { size: 9 }, exponentformat: "SI", rangemode: S.y === "log" ? undefined : "tozero" };
-    const col = r.blank ? blankC : (byType[r.type] || ink3);
-    traces.push({ type: "scattergl", mode: "lines", x: r.t.map(tx), y: r.metals[m], xaxis: xa, yaxis: ya,
-      line: { color: col, width: r.blank ? 1.4 : 1.2 },
-      hovertemplate: `#${RUNS.indexOf(r) + 1} ${r.name} · ${m}<br>%{x:.3f} ${unitLbl()} · %{y:,.0f} CPS<extra></extra>` });
-    CURRENT.push({ label: r.name, metal: m, color: col, t: r.t, y: r.metals[m], xa, ya });
-    if (r.blank) layout.shapes.push({ type: "rect", layer: "below", xref: xa + " domain", yref: ya + " domain", x0: 0, x1: 1, y0: 0, y1: 1, fillcolor: soft, line: { width: 0 } });
+    const col = isBlank(r) ? blankC : (st.color[r.type] || ink3), y = r.metals[m] || r.t.map(() => 0);
+    traces.push({ type: "scattergl", mode: "lines", x: r.t.map(tx), y, xaxis: xa, yaxis: ya, line: { color: col, width: isBlank(r) ? 1.4 : 1.2 },
+      hovertemplate: `#${q} ${r.name} · ${m}<br>%{x:.3f} ${unitLbl()} · %{y:,.0f} CPS<extra></extra>` });
+    CURRENT.push({ label: r.name, metal: m, color: col, t: r.t, y, xa, ya });
+    if (isBlank(r)) layout.shapes.push({ type: "rect", layer: "below", xref: xa + " domain", yref: ya + " domain", x0: 0, x1: 1, y0: 0, y1: 1, fillcolor: soft, line: { width: 0 } });
     layout.shapes.push({ type: "rect", layer: "below", xref: xa, yref: ya + " domain", x0: tx(wa), x1: tx(wb), y0: 0, y1: 1, fillcolor: grid, line: { width: 0 } });
-    if (c === 0) layout.annotations.push({ text: `#${RUNS.indexOf(r) + 1} · ${hhmm(r)} · <b>${r.name}</b>${r.blank ? " (blank)" : ""}`,
+    if (c === 0) layout.annotations.push({ text: `#${q} · ${hhmm(r)} · <b>${esc(r.name)}</b>${isBlank(r) ? " (blank)" : ""}`,
       xref: xa + " domain", yref: ya + " domain", x: 0.005, y: 0.98, xanchor: "left", yanchor: "top", showarrow: false,
-      font: { size: 10.5, color: ink }, bgcolor: r.blank ? soft : panel, borderpad: 1 });
+      font: { size: 10.5, color: ink }, bgcolor: isBlank(r) ? soft : panel, borderpad: 1 });
   }));
   S.marks.forEach(mk => { const s = CURRENT.find(c => c.label === mk.label && c.metal === mk.metal); if (!s) return;
     traces.push({ type: "scatter", mode: "markers", hoverinfo: "skip", x: [tx(mk.t)], y: [mk.y], xaxis: s.xa, yaxis: s.ya,
       marker: { size: 9, color: panel, line: { color: ink, width: 2 } } }); });
   document.getElementById("blankNote").textContent =
-    `All ${RUNS.length} runs in the order they were acquired, raw CPS (no blank subtraction), each panel on its own scale. Shaded rows are blanks; the grey band is the peak window used below.`;
+    `All ${used().length} included runs in the order they were acquired, raw CPS (no blank subtraction), each panel on its own scale. Shaded rows are blanks; the grey band is the peak window used below.`;
   Plotly.react("plot", traces, layout, { responsive: true, displaylogo: false, modeBarButtonsToRemove: ["lasso2d", "select2d", "autoScale2d"] });
   updateApex(); drawMarks(); renderCarry(metals);
 }
 function renderCarry(metals) {
   const wa = +document.getElementById("winA").value, wb = +document.getElementById("winB").value;
-  const rowsHtml = [];
-  RUNS.forEach((r, i) => {
-    if (!r.blank || i === 0) return;
-    const prev = RUNS[i - 1];
+  const Q = used(), rowsHtml = [];
+  Q.forEach((r, i) => {
+    if (!isBlank(r) || i === 0) return;
+    const prev = Q[i - 1];
     const cells = metals.map(m => {
-      const ab = windowArea(r.t, r.metals[m], wa, wb), ap = windowArea(prev.t, prev.metals[m], wa, wb);
+      const ab = r.metals[m] && windowArea(r.t, r.metals[m], wa, wb), ap = prev.metals[m] && windowArea(prev.t, prev.metals[m], wa, wb);
       if (ab == null || ap == null || ap <= 0) return `<td class="num">–</td>`;
       const pct = 100 * Math.max(0, ab) / ap;
       return `<td class="num${pct >= 1 ? " hi" : ""}" title="blank ${fmtC(ab)} vs ${fmtC(ap)} CPS·s">${pct < 0.01 ? "<0.01" : pct.toFixed(2)}%</td>`;
     }).join("");
-    rowsHtml.push(`<tr><td>#${i + 1} ${r.name} <span class="note">${hhmm(r)}</span></td><td>#${i} ${prev.name}${prev.blank ? " (blank)" : ""}</td>${cells}</tr>`);
+    rowsHtml.push(`<tr><td>#${i + 1} ${esc(r.name)} <span class="note">${hhmm(r)}</span></td><td>#${i} ${esc(prev.name)}${isBlank(prev) ? " (blank)" : ""}</td>${cells}</tr>`);
   });
   document.getElementById("carryTbl").innerHTML = rowsHtml.length
     ? `<tr><th>Blank</th><th>Injected just before</th>${metals.map(m => `<th style="text-align:right">${m}</th>`).join("")}</tr>${rowsHtml.join("")}
        <tr><td colspan="${2 + metals.length}" class="note" style="white-space:normal;padding-top:8px">Values of 1% or more are highlighted. Negative blank areas (blank below its own baseline) count as 0%. Hover a value to see both areas.</td></tr>`
     : `<tr><td class="empty">No blank follows another run in this batch, so carryover can't be estimated.</td></tr>`;
-  // background through the queue
   const ink = css("--ink"), ink2 = css("--ink-2"), grid = css("--grid"), line = css("--line"), panel = css("--panel"), blankC = css("--blank");
-  const { byType } = colorMap(); const n = metals.length;
+  const st = colorMap(); const n = metals.length;
   const traces = [], layout = { paper_bgcolor: panel, plot_bgcolor: panel, font: { family: css("--font"), color: ink2, size: 11 },
     margin: { l: 56, r: 10, t: 10, b: 90 }, height: 170 * n + 110, showlegend: false, hovermode: "closest",
     hoverlabel: { font: { family: css("--mono"), size: 12 } } };
-  const labels = RUNS.map((r, i) => `#${i + 1} ${r.name.length > 16 ? r.name.slice(0, 15) + "…" : r.name}`);
+  const labels = Q.map((r, i) => `#${i + 1} ${r.name.length > 16 ? r.name.slice(0, 15) + "…" : r.name}`);
   metals.forEach((m, j) => {
-    const k = j + 1, ya = "y" + (k > 1 ? k : ""), yk = "yaxis" + (k > 1 ? k : "");
-    const bg = RUNS.map(r => { const v = r.metals[m].filter((_, i) => r.t[i] <= 60).sort((a, b) => a - b); return v[v.length >> 1]; });
+    const k = j + 1, ya = "y" + (k > 1 ? k : "");
+    const bg = Q.map(r => { if (!r.metals[m]) return null; const v = r.metals[m].filter((_, i) => r.t[i] <= 60).sort((a, b) => a - b); return v[v.length >> 1]; });
     traces.push({ type: "scatter", mode: "lines", x: labels, y: bg, yaxis: ya, line: { color: line, width: 1.5 }, hoverinfo: "skip" });
     traces.push({ type: "scatter", mode: "markers", x: labels, y: bg, yaxis: ya,
-      marker: { size: 9, color: RUNS.map(r => r.blank ? panel : (byType[r.type] || ink2)),
-        line: { color: RUNS.map(r => r.blank ? blankC : panel), width: 2 } },
-      customdata: RUNS.map(r => [r.name, hhmm(r)]),
+      marker: { size: 9, color: Q.map(r => isBlank(r) ? panel : (st.color[r.type] || ink2)), line: { color: Q.map(r => isBlank(r) ? blankC : panel), width: 2 } },
+      customdata: Q.map(r => [r.name, hhmm(r)]),
       hovertemplate: `%{customdata[0]} (%{customdata[1]})<br>${m} background %{y:,.0f} CPS<extra></extra>` });
     const top = 1 - j / n, bottom = top - 1 / n + 0.07;
-    layout[yk] = { domain: [bottom, top], title: { text: `${m}`, font: { size: 11, color: ink } }, gridcolor: grid, linecolor: line,
-      zeroline: false, rangemode: "tozero", exponentformat: "SI", tickfont: { size: 10 } };
-    if (k > 1) layout["yaxis" + k].anchor = "x";
+    layout["yaxis" + (k > 1 ? k : "")] = { domain: [bottom, top], title: { text: m, font: { size: 11, color: ink } }, gridcolor: grid, linecolor: line,
+      zeroline: false, rangemode: "tozero", exponentformat: "SI", tickfont: { size: 10 }, anchor: "x" };
   });
   layout.xaxis = { tickangle: -45, tickfont: { size: 9.5 }, gridcolor: grid, linecolor: line, anchor: "y" + (n > 1 ? n : "") };
   Plotly.react("bgPlot", traces, layout, { responsive: true, displaylogo: false, displayModeBar: false });
 }
 ["winA", "winB"].forEach(id => document.getElementById(id).addEventListener("change", () => S.view === "order" && render()));
 
-/* ---------- cursor readout, zoom, click-to-mark ---------- */
-function nearestIdx(t, x) { let lo = 0, hi = t.length - 1; while (hi - lo > 1) { const m = (lo + hi) >> 1; (t[m] < x ? lo = m : hi = m); } return (x - t[lo] < t[hi] - x) ? lo : hi; }
+/* ================= cursor readout, zoom, marks, apex ================= */
 function bindPlot() {
   const el = document.getElementById("plot");
-  el.on("plotly_hover", ev => {
-    const p = ev.points[0]; const s = CURRENT[p.curveNumber]; if (!s) return;
+  el.on("plotly_hover", ev => { const p = ev.points[0], s = CURRENT[p.curveNumber]; if (!s) return;
     const tsec = S.unit === "min" ? p.x * 60 : p.x;
-    document.getElementById("readout").textContent = `${s.label} · ${s.metal} · t = ${fmtBoth(tsec)} · ${fmtC(p.y)} CPS`;
-  });
-  el.on("plotly_click", ev => {
-    const p = ev.points[0]; const s = CURRENT[p.curveNumber]; if (!s) return;
-    const tsec = S.unit === "min" ? p.x * 60 : p.x;
-    S.marks.push({ label: s.label, metal: s.metal, color: s.color, t: tsec, y: p.y });
-    render();
-  });
+    document.getElementById("readout").textContent = `${s.label} · ${s.metal} · t = ${fmtBoth(tsec)} · ${fmtC(p.y)} CPS`; });
+  el.on("plotly_click", ev => { const p = ev.points[0], s = CURRENT[p.curveNumber]; if (!s) return;
+    S.marks.push({ label: s.label, metal: s.metal, color: s.color, t: S.unit === "min" ? p.x * 60 : p.x, y: p.y }); render(); });
   el.on("plotly_relayout", ev => {
-    const keys = Object.keys(ev);
-    const r0 = keys.find(k => /^xaxis\d*\.range\[0\]$/.test(k));
+    const keys = Object.keys(ev), r0 = keys.find(k => /^xaxis\d*\.range\[0\]$/.test(k));
     if (keys.some(k => /^xaxis\d*\.autorange$/.test(k) && ev[k])) xRange = null;
-    else if (r0) {
-      const k = S.unit === "min" ? 60 : 1; xRange = [ev[r0] * k, ev[r0.replace("[0]", "[1]")] * k];
-    } else return;
+    else if (r0) { const k = S.unit === "min" ? 60 : 1; xRange = [ev[r0] * k, ev[r0.replace("[0]", "[1]")] * k]; }
+    else return;
     updateApex();
   });
 }
-
 let APEX = [];
 function updateApex() {
   const [a, b] = xRange || [-Infinity, Infinity];
   APEX = CURRENT.filter(s => !s.isBlank).map(s => {
-    let best = -1, bi = -1;
+    let best = -Infinity, bi = -1;
     for (let i = 0; i < s.t.length; i++) if (s.t[i] >= a && s.t[i] <= b && s.y[i] > best) { best = s.y[i]; bi = i; }
     return bi < 0 ? null : { label: s.label, metal: s.metal, color: s.color, t: s.t[bi], y: best };
   }).filter(Boolean);
@@ -503,50 +789,38 @@ function updateApex() {
   document.getElementById("apexTbl").innerHTML = APEX.length
     ? `<caption class="note" style="caption-side:top;text-align:left;padding-bottom:6px">Range: ${range}</caption>
        <tr><th>Trace</th><th>Metal</th><th style="text-align:right">Apex (s)</th><th style="text-align:right">Apex (min)</th><th style="text-align:right">CPS</th></tr>` +
-      APEX.map(r => `<tr><td><span class="dot" style="background:${r.color}"></span>${r.label}</td><td>${r.metal}</td>
+      APEX.map(r => `<tr><td><span class="dot" style="background:${r.color}"></span>${esc(r.label)}</td><td>${r.metal}</td>
         <td class="num">${r.t.toFixed(2)}</td><td class="num">${(r.t / 60).toFixed(3)}</td><td class="num">${fmtC(r.y)}</td></tr>`).join("")
     : `<tr><td class="empty">No visible traces in this range.</td></tr>`;
 }
 function drawMarks() {
   document.getElementById("markTbl").innerHTML = S.marks.length
     ? `<tr><th>Trace</th><th>Metal</th><th style="text-align:right">Time (s)</th><th style="text-align:right">Time (min)</th><th style="text-align:right">CPS</th><th></th></tr>` +
-      S.marks.map((r, i) => `<tr><td><span class="dot" style="background:${r.color}"></span>${r.label}</td><td>${r.metal}</td>
+      S.marks.map((r, i) => `<tr><td><span class="dot" style="background:${r.color}"></span>${esc(r.label)}</td><td>${r.metal}</td>
         <td class="num">${r.t.toFixed(2)}</td><td class="num">${(r.t / 60).toFixed(3)}</td><td class="num">${fmtC(r.y)}</td>
         <td><button class="x" data-i="${i}" aria-label="Remove mark">×</button></td></tr>`).join("")
     : `<tr><td class="empty">No marks yet. Click a point on any trace.</td></tr>`;
   document.querySelectorAll("#markTbl .x").forEach(b => b.onclick = () => { S.marks.splice(+b.dataset.i, 1); render(); });
 }
 document.getElementById("clearMarks").onclick = () => { S.marks = []; render(); };
-function copyRows(rows, btn) {
-  const txt = ["trace\tmetal\ttime_s\ttime_min\tcps", ...rows.map(r => [r.label, r.metal, r.t.toFixed(2), (r.t / 60).toFixed(3), Math.round(r.y)].join("\t"))].join("\n");
-  const done = () => { const o = btn.textContent; btn.textContent = "Copied"; setTimeout(() => btn.textContent = o, 1200); };
-  const fail = () => { btn.textContent = "Copy blocked"; };
+function copyText(txt, btn) {
+  const o = btn.textContent, done = () => { btn.textContent = "Copied"; setTimeout(() => btn.textContent = o, 1200); },
+        fail = () => { btn.textContent = "Copy blocked"; setTimeout(() => btn.textContent = o, 1800); };
   try { navigator.clipboard.writeText(txt).then(done, fail); } catch (e) { fail(); }
 }
-document.getElementById("copyApex").onclick = e => copyRows(APEX, e.currentTarget);
-document.getElementById("copyMarks").onclick = e => copyRows(S.marks, e.currentTarget);
+const rowsTsv = rows => ["trace\tmetal\ttime_s\ttime_min\tcps", ...rows.map(r => [r.label, r.metal, r.t.toFixed(2), (r.t / 60).toFixed(3), Math.round(r.y)].join("\t"))].join("\n");
+document.getElementById("copyApex").onclick = e => copyText(rowsTsv(APEX), e.currentTarget);
+document.getElementById("copyMarks").onclick = e => copyText(rowsTsv(S.marks), e.currentTarget);
 
-/* ---------- file loading ---------- */
-document.getElementById("files").addEventListener("change", async ev => {
-  const files = [...ev.target.files]; if (!files.length) return;
-  const runs = [];
-  for (const f of files) { const r = parseCsv(await f.text(), f.name); if (r && r.t.length) runs.push(r); }
-  if (!runs.length) { document.getElementById("batchInfo").textContent = "None of those files had a 'Time [Sec]' table. Pick the MassHunter CSV exports."; return; }
-  xRange = null; loadRuns(runs, `${runs.length} file(s) loaded from your computer`);
-});
-
-/* ---------- theme changes ---------- */
-const rerender = () => { buildChips(); render(); };
+/* ================= theme + boot ================= */
+const rerender = () => { if (!RUNS.length) return; buildChips(); render(); };
 matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", rerender);
 new MutationObserver(rerender).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
-
-/* ---------- boot ---------- */
 function boot() {
-  bindPlotOnce();
-  if (EMBEDDED) loadRuns(EMBEDDED.runs, EMBEDDED.label);
-  else document.getElementById("readout").textContent = "Load the CSV exports from one batch to begin (select all files at once).";
+  Plotly.newPlot("plot", [], {}, { displaylogo: false }); bindPlot();
+  if (EMBEDDED) { LABEL = EMBEDDED.label; EDITS = store.get(editKey(), {}); ingest(EMBEDDED.files, true).then(() => setStatus(`${RUNS.length} runs loaded with the page.`)); }
+  else { LABEL = "Your files"; finishLoad(); mgr.hidden = false; mgrBtn.setAttribute("aria-expanded", "true"); buildManager();
+    document.getElementById("readout").textContent = "Open Files & samples and use “Add files…” to load the CSV exports from one batch (select them all at once)."; }
 }
-let bound = false;
-function bindPlotOnce() { if (bound) return; Plotly.newPlot("plot", [], {}); bindPlot(); bound = true; }
 if (window.Plotly) boot(); else window.addEventListener("load", boot);
 </script>

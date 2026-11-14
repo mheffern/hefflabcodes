@@ -9,7 +9,8 @@ What it does
 2. Groups runs by METHOD (run length), so e.g. a 700 s standards method and a 1065 s
    serum method are blank-corrected, compared and plotted separately.
 3. Uses a sample sheet (sample_sheet.csv) for each run's TYPE, whether it is a BLANK,
-   and whether to INCLUDE it. If none exists, a guessed one is written for you to edit.
+   whether to INCLUDE it, its BIO_SAMPLE (runs sharing one are technical replicates) and
+   BLANK_USED (auto / none / a specific blank run). If none exists, a guessed one is written.
 4. Blank-corrects every run, metal by metal, using only blanks from the same method:
      --blank-mode mean     average of all same-method blanks (default)
      --blank-mode nearest  the same-method blank run closest before it in the queue
@@ -103,6 +104,12 @@ def guess_type(name):
     return t or name
 
 
+def guess_bio(name):
+    """Biological sample = name without the injection number: HumanCtrl_1 & HumanCtrl_2 -> HumanCtrl
+    (technical replicates); NASH-01_1 vs NASH-02_1 -> different biological samples."""
+    return re.sub(r"_\d+$", "", name) or name
+
+
 def load_or_make_sample_sheet(data_dir, runs, method, sheet_path):
     if not sheet_path.exists():
         comments = read_batch_comments(data_dir)
@@ -111,12 +118,16 @@ def load_or_make_sample_sheet(data_dir, runs, method, sheet_path):
             "type": ["Blank" if "blank" in n.lower() else guess_type(n) for n in runs],
             "blank": ["yes" if "blank" in n.lower() else "no" for n in runs],
             "include": "yes",
+            "bio_sample": ["" if "blank" in n.lower() else guess_bio(n) for n in runs],
+            "blank_used": ["" if "blank" in n.lower() else "auto" for n in runs],
             "method": [method[n] for n in runs],
             "comment": [comments.get(n, "") for n in runs],
         })
         sheet.to_csv(sheet_path, index=False)
         print(f"No sample sheet found -> wrote a guessed one to {sheet_path}\n"
-              f"   Check/edit 'type', 'blank' and 'include', then re-run.")
+              f"   Check/edit 'type', 'blank', 'include', 'bio_sample' and 'blank_used', then re-run.\n"
+              f"   bio_sample: same value = technical replicates (same material injected again).\n"
+              f"   blank_used: auto, none, or blank run name(s) separated by ';'.")
 
     sheet = pd.read_csv(sheet_path, dtype=str).fillna("")
     sheet.columns = [c.strip().lower() for c in sheet.columns]
@@ -124,6 +135,12 @@ def load_or_make_sample_sheet(data_dir, runs, method, sheet_path):
     sheet["blank"] = yes(sheet["blank"])
     if "include" in sheet:
         sheet = sheet[yes(sheet["include"]) | (sheet["include"].str.strip() == "")]
+    if "bio_sample" not in sheet:
+        sheet["bio_sample"] = ""
+    sheet["bio_sample"] = [b.strip() or guess_bio(n) for n, b in zip(sheet["sample"], sheet["bio_sample"])]
+    if "blank_used" not in sheet:
+        sheet["blank_used"] = "auto"
+    sheet["blank_used"] = sheet["blank_used"].str.strip().replace("", "auto")
     missing = set(runs) - set(sheet["sample"])
     if missing:
         print(f"Not in sample sheet / excluded (skipped): {sorted(missing)}")
@@ -178,6 +195,16 @@ def main():
         print(f"\n[{meth}] {len(members)} runs, blanks: {blanks or 'NONE -> no subtraction'}")
 
         def chosen_blanks(n):
+            choice = sheet.loc[n, "blank_used"]
+            if choice.lower() == "none":
+                return []
+            if choice.lower() != "auto":
+                picked = [b.strip() for b in choice.split(";") if b.strip()]
+                bad = [b for b in picked if b not in grid]
+                if bad:
+                    print(f"WARNING: blank_used for {n} names {bad}, not a run in this method -> using auto")
+                else:
+                    return picked
             if not blanks:
                 return []
             if args.blank_mode == "mean":
@@ -195,7 +222,8 @@ def main():
             for m in metals:
                 blk = np.mean([grid[b][m] for b in cb], axis=0) if cb else np.zeros_like(t)
                 all_long.append(pd.DataFrame({
-                    "sample": n, "type": sheet.loc[n, "type"], "method": meth, "metal": m,
+                    "sample": n, "type": sheet.loc[n, "type"], "bio_sample": sheet.loc[n, "bio_sample"],
+                    "method": meth, "metal": m,
                     "acquired": acquired[n], "time_s": t, "raw_cps": grid[n][m],
                     "blank_cps": blk, "corrected_cps": grid[n][m] - blk}))
 
@@ -230,7 +258,8 @@ def main():
             x0, x1 = x[:k].mean(), x[-k:].mean()
             y0, y1 = np.median(y[:k]), np.median(y[-k:])
             base = y0 + (y1 - y0) * (x - x0) / (x1 - x0)
-            areas.append({"sample": n, "type": g["type"].iat[0], "method": g["method"].iat[0],
+            areas.append({"sample": n, "type": g["type"].iat[0], "bio_sample": g["bio_sample"].iat[0],
+                          "method": g["method"].iat[0],
                           "metal": m, "window": f"{s:.0f}-{e:.0f} s",
                           "raw_area": np.trapezoid(w.raw_cps, x),
                           "blank_area": np.trapezoid(w.blank_cps, x),
@@ -243,9 +272,17 @@ def main():
               "      (e.g. Cu), pass --window START END around your peaks.")
     areas.to_csv(out / "peak_areas.csv", index=False)
 
-    summary = (areas.groupby(["method", "metal", "window", "type"])["peak_area"]
-               .agg(n="count", mean="mean", sd="std").reset_index())
-    summary["cv_%"] = 100 * summary["sd"] / summary["mean"]
+    # technical replicates (same bio_sample) are averaged first; then mean/SD across biological samples
+    keys = ["method", "metal", "window", "type"]
+    by_bio = (areas.groupby(keys + ["bio_sample"])["peak_area"]
+              .agg(n_injections="count", mean="mean", technical_sd="std").reset_index())
+    by_bio["technical_cv_%"] = 100 * by_bio["technical_sd"] / by_bio["mean"]
+    by_bio.to_csv(out / "peak_areas_by_bio_sample.csv", index=False)
+    summary = (by_bio.groupby(keys)
+               .agg(n_bio=("mean", "count"), n_injections=("n_injections", "sum"),
+                    mean=("mean", "mean"), sd_biological=("mean", "std"),
+                    mean_technical_cv_pct=("technical_cv_%", "mean")).reset_index())
+    summary["cv_biological_%"] = 100 * summary["sd_biological"] / summary["mean"]
     summary.to_csv(out / "summary_by_type.csv", index=False)
 
     # ---- plots, one set per method
@@ -295,15 +332,20 @@ def main():
             for ax, m in zip(np.atleast_1d(axes), metals):
                 a = A[(A.metal == m) & (A.window == win)]
                 for i, ty in enumerate(types):
-                    v = a[a.type == ty]["peak_area"]
-                    ax.bar(i, v.mean(), yerr=v.std() if len(v) > 1 else 0, color=colors[ty],
+                    at = a[a.type == ty]
+                    bio = at.groupby("bio_sample")["peak_area"].mean()   # technical reps averaged
+                    ax.bar(i, bio.mean(), yerr=bio.std() if len(bio) > 1 else 0, color=colors[ty],
                            alpha=0.6, capsize=4)
-                    ax.scatter(np.full(len(v), i), v, color="k", s=12, zorder=3)
+                    ax.scatter(np.full(len(at), i), at["peak_area"], facecolors="none", edgecolors="k",
+                               s=14, lw=0.7, zorder=3)                        # each injection
+                    ax.scatter(np.full(len(bio), i), bio, color="k", s=16, zorder=4)  # each bio sample
                 ax.set_xticks(range(len(types)), types, rotation=45, ha="right", fontsize=7)
                 ax.set_title(m)
                 ax.axhline(0, color="k", lw=0.5)
             np.atleast_1d(axes)[0].set_ylabel("Peak area, blank + baseline corr. (CPS·s)")
-            fig.suptitle(f"{meth}: integrated area, {win}")
+            fig.suptitle(f"{meth}: integrated area, {win}\n"
+                         f"bar = mean of biological samples ± SD; filled dot = biological sample; open = injection",
+                         fontsize=9)
             fig.tight_layout()
             fig.savefig(out / f"areas_{tag}_{win.replace(' ', '').replace('-', 'to')}.png", dpi=150)
             plt.close(fig)
