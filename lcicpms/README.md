@@ -44,5 +44,12 @@ and select the exports from one batch.
 - Blank subtraction (off / mean / nearest prior / per-run choice), technical vs biological replicates,
   mean by type, run-order carryover check, multi-peak table (CSV), independent X/Y zoom, Save picture (PNG/SVG).
 
+- **Projects:** *Project → Save project file* writes one `.lcproj.json` with the parsed data of every file and
+  every setting (pairing, roles, replicates, blanks, panels, scaling, offsets, view, zoom, marks, formats).
+  *Open project…* restores it exactly; *Add project(s)…* merges one or more projects (clashing run names get
+  “· project name”). Work is also autosaved in the browser, listed under *Recent projects*, and a page with
+  built-in data offers to pick up where you left off.
+
 To make a copy with a batch preloaded:
 `python lcicpms/make_viewer.py path/to/csv_folder --label "Batch name" [--extra other_export.CSV ...]`
+or from a saved project: `python lcicpms/make_viewer.py --project saved.lcproj.json out.html`

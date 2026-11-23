@@ -142,6 +142,7 @@ dl.kv dd { margin: 0; overflow-wrap: anywhere; }
       <div class="sub" id="batchInfo">No data loaded</div>
     </div>
     <div class="btns">
+      <button class="btn" id="projBtn" aria-expanded="false" aria-controls="projCard">Project</button>
       <button class="btn" id="mgrBtn" aria-expanded="false" aria-controls="mgr">Files &amp; samples</button>
       <button class="btn" id="pnlBtn" aria-expanded="false" aria-controls="pnlCard">Panels &amp; offsets</button>
     </div>
@@ -168,6 +169,25 @@ dl.kv dd { margin: 0; overflow-wrap: anywhere; }
     <div class="tbl" style="margin-top:6px"><table id="mgrTbl"></table></div>
     <div id="fmtBox"></div>
     <p class="note" style="margin:8px 0 0">Recognized automatically: Agilent ICP-MS “Intensity Vs Time” exports, Agilent DAD signal exports (one block per wavelength), <code>BatchLog.csv</code> and <code>sample_sheet.csv</code>. Anything else opens the import editor, where you can set the layout once and save it as a format.</p>
+  </section>
+
+  <!-- Project -->
+  <section class="card" id="projCard" hidden aria-label="Project">
+    <div class="row" style="align-items:flex-start">
+      <div style="min-width:0;flex:1 1 320px"><h2>Project</h2>
+        <p class="hint" style="margin:0">A project keeps the data of every loaded file plus all your settings: run pairing, roles, replicates, blank choices, panels, scaling, offsets, view, zoom, marked points and import formats.
+          Save it as a file to reopen anywhere or send to someone; open several to compare batches side by side.</p></div>
+      <div class="ctl"><label class="lbl" for="projName">Project name</label><input class="in ww" id="projName"></div>
+    </div>
+    <div class="btns" style="margin-top:10px">
+      <button class="btn primary" id="saveProj">Save project file</button>
+      <label class="btn" for="openProj">Open project…</label><input type="file" id="openProj" accept=".json,application/json" multiple>
+      <label class="btn" for="addProj">Add project(s)…</label><input type="file" id="addProj" accept=".json,application/json" multiple>
+    </div>
+    <div class="status" id="projStatus" role="status" style="margin-top:8px"></div>
+    <p class="note" id="autosaveNote" style="margin:4px 0 0"></p>
+    <h3>Recent projects in this browser</h3>
+    <div class="tbl" id="recentBox"></div>
   </section>
 
   <!-- Panels & offsets -->
@@ -496,7 +516,8 @@ function derive() {
     });
   });
   RUNS = [...byName.values()].map(r => Object.assign(r, runMeta(r.name)));
-  RUNS.forEach(r => { const end = Math.max(...Object.values(r.signals).map(s => s.t[s.t.length - 1])); r.method = Math.round(end / 10) * 10; });
+  // method = recorded run length (unshifted), so a detector offset never moves a run to another method
+  RUNS.forEach(r => { const end = Math.max(...r.files.flatMap(f => f.signals.map(s => s.t[s.t.length - 1]))); r.method = Math.round(end / 10) * 10; });
   RUNS.sort((a, b) => (a.acquired || "~").localeCompare(b.acquired || "~") || a.name.localeCompare(b.name));
   METHODS = [...new Set(RUNS.map(r => r.method))].sort((a, b) => b - a);
   const all = new Map(); RUNS.forEach(r => Object.values(r.signals).forEach(s => all.set(s.key, s)));
@@ -506,7 +527,8 @@ function derive() {
   [...S.sigOn].forEach(k => !keys.includes(k) && S.sigOn.delete(k));
   keys.forEach(k => { if (!SEEN_SIG.has(k)) { SEEN_SIG.add(k); S.sigOn.add(k); } });
   if (!S.sigOn.size) keys.forEach(k => S.sigOn.add(k));
-  if (S.method !== "all" && !METHODS.includes(S.method)) S.method = METHODS[0];
+  const busiest = () => METHODS.reduce((m, x) => RUNS.filter(r => r.method === x).length > RUNS.filter(r => r.method === m).length ? x : m, METHODS[0]);
+  if (S.method !== "all" && !METHODS.includes(S.method)) S.method = busiest();
   S.panels.forEach(p => p.items = p.items.filter(it => keys.includes(it.key)));
 }
 const SEEN_SIG = new Set();
@@ -1039,7 +1061,7 @@ function computeSeries(panels) {
   return out;
 }
 function render() {
-  if (!RUNS.length) { Plotly.purge("plot"); CURRENT = []; PEAKS = []; drawPeaks(); drawMarks(); return; }
+  if (!RUNS.length) { Plotly.react("plot", [], { paper_bgcolor: css("--panel"), plot_bgcolor: css("--panel"), height: 420 }, PLOT_CONFIG); CURRENT = []; PEAKS = []; drawPeaks(); drawMarks(); return; }
   if (S.view === "order") return renderOrder();
   const panels = activePanels();
   CURRENT = computeSeries(panels);
@@ -1069,7 +1091,7 @@ function render() {
       marker: { size: 10, color: panel, line: { color: ink, width: 2 } } }); });
   findAllPeaks(); traces.push(...peakMarkerTraces(s => s.ya, () => "x"));
   Plotly.react("plot", traces, layout, PLOT_CONFIG); afterDraw();
-  drawPeaks(); drawMarks();
+  drawPeaks(); drawMarks(); scheduleAutosave();
 }
 
 /* =====================================================================
@@ -1130,7 +1152,7 @@ function renderOrder() {
     `All ${used().length} included runs in the order they were acquired (runs without a time in the file come first), raw signals (no blank subtraction), each panel on its own scale. Shaded rows are blanks; the grey band is the peak window used below.`;
   findAllPeaks(); traces.push(...peakMarkerTraces(s => s.ya, s => s.xa));
   Plotly.react("plot", traces, layout, PLOT_CONFIG); afterDraw();
-  drawPeaks(); drawMarks(); renderCarry();
+  drawPeaks(); drawMarks(); renderCarry(); scheduleAutosave();
 }
 function carrySignals() { const keys = []; activePanels().forEach(p => p.items.forEach(it => !keys.includes(it.key) && keys.push(it.key))); return keys; }
 function renderCarry() {
@@ -1368,20 +1390,167 @@ document.getElementById("csvPeaks").onclick = e => {
 };
 
 /* =====================================================================
+   PROJECTS: save / open / add several / autosave in this browser
+   A project holds the parsed data of every file plus every setting, so it reopens exactly as left.
+   ===================================================================== */
+const PROJ_APP = "lc-trace-viewer", PROJ_VER = 1;
+const r6 = v => (v == null || !isFinite(v)) ? null : +(+v).toPrecision(6);
+function serializeProject() {
+  return { app: PROJ_APP, version: PROJ_VER, name: LABEL, source: SOURCE || LABEL, saved: new Date().toISOString(),
+    files: FILES.map(f => ({ fname: f.fname, kind: f.kind, run: f.run, origRun: f.origRun || f.run, path: f.path, acquired: f.acquired,
+      header: f.header, footer: f.footer, extra: f.extra || null,
+      signals: f.signals.map(s => ({ det: s.det, name: s.name, unit: s.unit, t: s.t.map(v => +v.toFixed(3)), y: s.y.map(r6) })) })),
+    batchlog: BATCHLOG, edits: { runs: EDITS.runs, files: EDITS.files },
+    layout: { mode: S.layout, panels: S.panels }, offsets: S.offsets, formats: FORMATS,
+    view: { view: S.view, method: S.method, blank: S.blank, unit: S.unit, y: S.y, zoom: S.zoom, showBlanks: S.showBlanks, peakMarks: S.peakMarks,
+      sigOn: [...S.sigOn], hidden: [...S.hidden], xRange, marks: S.marks,
+      prom: document.getElementById("prom").value, winA: document.getElementById("winA").value, winB: document.getElementById("winB").value } };
+}
+const isProject = o => o && o.app === PROJ_APP && Array.isArray(o.files);
+function filesFromProject(p) {
+  return p.files.map(f => ({ ...f, text: null, signals: f.signals.map(s => ({ ...s, key: `${s.det} · ${s.name}`, y: s.y.map(v => v == null ? NaN : v) })) }));
+}
+function mergeFormats(list) { (list || []).forEach(f => { if (!FORMATS.some(x => x.name === f.name)) FORMATS.push(f); }); saveFormats(); }
+let SOURCE = null;   // the page/project this work started from, so renamed work can still be resumed
+function openProject(p) {           // replace everything with this project
+  LABEL = p.name || "Project"; SOURCE = p.source || LABEL; document.getElementById("projName").value = LABEL;
+  FILES = filesFromProject(p); BATCHLOG = p.batchlog || {}; PENDING = [];
+  EDITS = { runs: (p.edits && p.edits.runs) || {}, files: (p.edits && p.edits.files) || {} };
+  S.layout = (p.layout && p.layout.mode) || "auto"; S.panels = (p.layout && p.layout.panels) || []; S.offsets = p.offsets || {};
+  EDITS.layout = { mode: S.layout, panels: S.panels }; EDITS.offsets = S.offsets; saveEdits();
+  mergeFormats(p.formats);
+  const v = p.view || {};
+  ["view", "blank", "unit", "y", "zoom", "showBlanks", "peakMarks"].forEach(k => { if (v[k] !== undefined) S[k] = v[k]; });
+  S.method = v.method ?? S.method; S.hidden = new Set(v.hidden || []); S.marks = v.marks || []; xRange = v.xRange || null;
+  if (v.prom) document.getElementById("prom").value = v.prom;
+  if (v.winA) document.getElementById("winA").value = v.winA; if (v.winB) document.getElementById("winB").value = v.winB;
+  FILES.forEach(f => f.signals.forEach(s => SEEN_SIG.add(s.key)));
+  S.sigOn = new Set(v.sigOn && v.sigOn.length ? v.sigOn : []);
+  finishLoad(); drawPending();
+  setStatus(`Opened project “${LABEL}”: ${FILES.length} files, ${RUNS.length} runs.`);
+}
+function addProject(p) {             // merge another project into what is open
+  const pname = p.name || "Project", existing = new Set(RUNS.map(r => r.name)), renamed = {};
+  const incoming = filesFromProject(p);
+  incoming.forEach(f => {
+    if (FILES.some(x => x.fname === f.fname)) f.fname = `${f.fname} (${pname})`;
+    if (existing.has(f.run)) { renamed[f.run] = `${f.run} · ${pname}`; f.run = renamed[f.run]; }
+    FILES.push(f);
+  });
+  const er = (p.edits && p.edits.runs) || {};
+  Object.entries(er).forEach(([name, meta]) => {
+    const nn = renamed[name] || name; const m = { ...meta };
+    if (m.blankUse && renamed[m.blankUse]) m.blankUse = renamed[m.blankUse];
+    EDITS.runs[nn] = m;
+  });
+  incoming.forEach(f => { EDITS.files[f.fname] = f.run; });
+  Object.entries(p.batchlog || {}).forEach(([k, v]) => { BATCHLOG[renamed[k] || k] = v; });
+  Object.entries(p.offsets || {}).forEach(([d, v]) => { if (S.offsets[d] === undefined) S.offsets[d] = v; });
+  mergeFormats(p.formats);
+  if (!LABEL.includes(pname)) { LABEL = LABEL && RUNS.length ? `${LABEL} + ${pname}` : pname; document.getElementById("projName").value = LABEL; }
+  saveEdits(); finishLoad();
+  return Object.keys(renamed).length;
+}
+async function readProjectFiles(list, replace) {
+  let opened = 0, renamed = 0; const bad = [];
+  for (const file of list) {
+    let p = null; try { p = JSON.parse(await file.text()); } catch (e) {}
+    if (!isProject(p)) { bad.push(file.name); continue; }
+    if (replace && opened === 0) openProject(p); else renamed += addProject(p);
+    opened++;
+  }
+  setStatus(`${opened} project(s) ${replace ? "opened" : "added"}${renamed ? ` · ${renamed} run(s) renamed to keep projects apart` : ""}${bad.length ? ` · not a project file: ${bad.join(", ")}` : ""}.`);
+  projMsg(`${opened} project(s) ${replace ? "opened" : "added"}.${renamed ? ` ${renamed} run(s) had names already in use, so “· project name” was added to them.` : ""}${bad.length ? ` Not a project file: ${bad.join(", ")}.` : ""}`);
+  scheduleAutosave(true);
+}
+
+/* --- autosave + recent projects (IndexedDB, this browser only) --- */
+const IDB = { db: null,
+  open() { return this.db || (this.db = new Promise((res, rej) => { try { const rq = indexedDB.open("lc-trace-viewer", 1);
+    rq.onupgradeneeded = () => rq.result.createObjectStore("projects", { keyPath: "name" }); rq.onsuccess = () => res(rq.result); rq.onerror = () => rej(rq.error); } catch (e) { rej(e); } })); },
+  async tx(mode, fn) { const db = await this.open(); return new Promise((res, rej) => { const t = db.transaction("projects", mode); const st = t.objectStore("projects"); const r = fn(st); t.oncomplete = () => res(r && r.result); t.onerror = () => rej(t.error); }); },
+  put(rec) { return this.tx("readwrite", st => st.put(rec)); },
+  del(name) { return this.tx("readwrite", st => st.delete(name)); },
+  async all() { const db = await this.open(); return new Promise((res, rej) => { const rq = db.transaction("projects").objectStore("projects").getAll(); rq.onsuccess = () => res(rq.result || []); rq.onerror = () => rej(rq.error); }); },
+};
+let autosaveTimer = null, autosaveOK = true, lastSaved = null;
+function scheduleAutosave(now) {
+  if (!RUNS.length || BOOTING || RESUME_PENDING) return;
+  clearTimeout(autosaveTimer);
+  autosaveTimer = setTimeout(async () => {
+    try { const data = serializeProject(); await IDB.put({ name: LABEL, saved: data.saved, runs: RUNS.length, files: FILES.length, data });
+      lastSaved = new Date(); autosaveOK = true; }
+    catch (e) { autosaveOK = false; }
+    drawAutosave(); if (!projCard.hidden) drawRecent();
+  }, now ? 50 : 2500);
+}
+function drawAutosave() {
+  const el = document.getElementById("autosaveNote"); if (!el) return;
+  el.textContent = RESUME_PENDING ? "Autosave is paused until you choose whether to pick up your saved work."
+    : !autosaveOK ? "Autosave isn't available in this browser view; use Save project file to keep your work."
+    : lastSaved ? `Autosaved in this browser at ${lastSaved.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.` : "Changes are autosaved in this browser.";
+}
+async function drawRecent() {
+  const box = document.getElementById("recentBox");
+  let list = []; try { list = (await IDB.all()).sort((a, b) => b.saved.localeCompare(a.saved)); } catch (e) { box.innerHTML = `<p class="note">Recent projects aren't available in this browser view.</p>`; return; }
+  box.innerHTML = list.length ? `<table><tr><th>Project</th><th>Last saved</th><th style="text-align:right">Runs</th><th></th></tr>${list.map((r, i) =>
+    `<tr><td>${esc(r.name)}${r.name === LABEL ? ` <span class="pill bio">open</span>` : ""}</td><td class="num" style="text-align:left">${esc(new Date(r.saved).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }))}</td><td class="num">${r.runs}</td>
+      <td><span class="btns"><button class="btn" data-ro="${i}">Open</button><button class="btn" data-ra="${i}">Add</button><button class="btn" data-rd="${i}">Delete</button></span></td></tr>`).join("")}</table>`
+    : `<p class="note">Nothing saved in this browser yet. Projects appear here automatically once data is loaded.</p>`;
+  box.querySelectorAll("[data-ro]").forEach(b => b.onclick = () => { openProject(list[+b.dataset.ro].data); projMsg(`Opened “${list[+b.dataset.ro].name}”.`); drawRecent(); });
+  box.querySelectorAll("[data-ra]").forEach(b => b.onclick = () => { const n = addProject(list[+b.dataset.ra].data); projMsg(`Added “${list[+b.dataset.ra].name}”.${n ? ` ${n} run(s) renamed to keep projects apart.` : ""}`); scheduleAutosave(true); });
+  box.querySelectorAll("[data-rd]").forEach(b => b.onclick = async () => {
+    if (b.dataset.armed !== "1") { b.dataset.armed = "1"; b.textContent = "Tap again"; setTimeout(() => { b.dataset.armed = ""; b.textContent = "Delete"; }, 3000); return; }
+    await IDB.del(list[+b.dataset.rd].name).catch(() => {}); drawRecent(); });
+}
+const projMsg = m => { document.getElementById("projStatus").textContent = m; };
+const projCard = document.getElementById("projCard"), projBtn = document.getElementById("projBtn");
+projBtn.onclick = () => { projCard.hidden = !projCard.hidden; projBtn.setAttribute("aria-expanded", !projCard.hidden); if (!projCard.hidden) { document.getElementById("projName").value = LABEL; drawRecent(); drawAutosave(); } };
+document.getElementById("projName").addEventListener("change", e => {
+  const v = e.target.value.trim(); if (!v || v === LABEL) { e.target.value = LABEL; return; }
+  LABEL = v; saveEdits(); finishLoad(); scheduleAutosave(true); projMsg(`Renamed to “${v}”. The old name stays in Recent until you delete it.`);
+});
+document.getElementById("saveProj").onclick = e => {
+  if (!RUNS.length) { projMsg("Load some data first."); return; }
+  const json = JSON.stringify(serializeProject());
+  saveFile(LABEL.replace(/[^\w.-]+/g, "_").replace(/_+/g, "_") + ".lcproj.json", new Blob([json], { type: "application/json" }), e.currentTarget);
+  projMsg(`Project file is ${(json.length / 1e6).toFixed(1)} MB. Open it later with “Open project…”, on any computer.`);
+};
+document.getElementById("openProj").addEventListener("change", e => { const f = [...e.target.files]; e.target.value = ""; if (f.length) readProjectFiles(f, true); });
+document.getElementById("addProj").addEventListener("change", e => { const f = [...e.target.files]; e.target.value = ""; if (f.length) readProjectFiles(f, false); });
+
+/* =====================================================================
    THEME + BOOT
    ===================================================================== */
 const rerender = () => { if (!RUNS.length) return; buildChips(); buildPanels(); render(); };
 matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", rerender);
 new MutationObserver(rerender).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
-let EMBEDDED_BOOT = false;
+let EMBEDDED_BOOT = false, BOOTING = true, RESUME_PENDING = false;
+async function offerResume(label) {
+  // if this browser autosaved a newer state of the same project, offer to pick up from it
+  let rec = null;
+  try { rec = (await IDB.all()).filter(r => r.name === label || (r.data && r.data.source === label)).sort((a, b) => b.saved.localeCompare(a.saved))[0]; } catch (e) { return; }
+  if (!rec) return;
+  RESUME_PENDING = true;   // don't let autosave overwrite the saved version until the viewer chooses
+  const box = document.getElementById("projStatus"); projCard.hidden = false; projBtn.setAttribute("aria-expanded", "true");
+  box.innerHTML = `<span class="pill bio">saved work found</span> You worked on “${esc(rec.name)}” (from this page) in this browser on ${esc(new Date(rec.saved).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }))}.
+    <span class="btns" style="display:inline-flex;margin-left:6px"><button class="btn primary" id="resumeYes">Pick up where I left off</button><button class="btn" id="resumeNo">Start from the page's data</button></span>`;
+  document.getElementById("resumeYes").onclick = () => { RESUME_PENDING = false; openProject(rec.data); projMsg(`Resumed “${rec.name}”.`); drawRecent(); };
+  document.getElementById("resumeNo").onclick = () => { RESUME_PENDING = false; scheduleAutosave(); projMsg("Starting from the page's data. Your saved version stays in Recent until it is overwritten by autosave."); };
+  drawRecent(); drawAutosave();
+}
 function boot() {
   Plotly.newPlot("plot", [], {}, { displaylogo: false }); bindPlot();
-  if (EMBEDDED) {
-    LABEL = EMBEDDED.label; loadEdits(); EMBEDDED_BOOT = true;
-    ingest(EMBEDDED.files, true).then(() => { EMBEDDED_BOOT = false; FILES.forEach(f => f.origRun = f.origRun || f.run); setStatus(`${FILES.length} files loaded with the page.`); });
+  if (isProject(EMBEDDED)) {
+    openProject(EMBEDDED); BOOTING = false; offerResume(LABEL);
+  } else if (EMBEDDED) {
+    LABEL = EMBEDDED.label; SOURCE = LABEL; document.getElementById("projName").value = LABEL; loadEdits(); EMBEDDED_BOOT = true;
+    ingest(EMBEDDED.files, true).then(() => { EMBEDDED_BOOT = false; BOOTING = false; FILES.forEach(f => f.origRun = f.origRun || f.run); setStatus(`${FILES.length} files loaded with the page.`); offerResume(LABEL); });
   } else {
-    LABEL = "Your files"; loadEdits(); finishLoad(); mgr.hidden = false; mgrBtn.setAttribute("aria-expanded", "true"); buildManager();
-    document.getElementById("readout").textContent = "Open Files & samples and use “Add files…” to load the exports from one batch (select them all at once).";
+    LABEL = "Untitled project"; document.getElementById("projName").value = LABEL; loadEdits(); finishLoad(); BOOTING = false;
+    mgr.hidden = false; mgrBtn.setAttribute("aria-expanded", "true"); buildManager();
+    projCard.hidden = false; projBtn.setAttribute("aria-expanded", "true"); drawRecent(); drawAutosave();
+    document.getElementById("readout").textContent = "Open a recent project, open a project file, or use Files & samples → “Add files…” to load exports (select them all at once).";
   }
 }
 if (window.Plotly) boot(); else window.addEventListener("load", boot);
