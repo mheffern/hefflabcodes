@@ -4,8 +4,9 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
 <script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>
 <style>
-/* Layout: instrument-software feel. Header with file manager toggle, control rail, sample chips,
-   stacked metal panels, then readout tables. Sample info opens in a side sheet. */
+/* Layout: instrument-software feel. Header with Files and Panels toggles, control rail, sample chips,
+   stacked panels (any detector: ICP-MS isotopes, DAD wavelengths, custom), then readout tables.
+   Sample info opens in a side sheet; picture export and the import editor open as dialogs. */
 :root {
   --bg: #f6f7f9; --panel: #ffffff; --ink: #14171c; --ink-2: #4c5562; --ink-3: #7c8592;
   --line: #dde1e7; --grid: #eceef2; --accent: #0f6e8c; --accent-soft: #e2f0f4;
@@ -42,10 +43,11 @@ h3 { font-size: 12px; font-weight: 600; margin: 14px 0 6px; color: var(--ink-2);
 .seg button + button { border-left: 1px solid var(--line); }
 .seg button[aria-pressed="true"] { background: var(--accent); color: var(--panel); font-weight: 500; }
 .seg button:disabled { opacity: .4; cursor: default; }
-button:focus-visible, select:focus-visible, input:focus-visible, label:focus-within { outline: 2px solid var(--accent); outline-offset: 1px; }
-.btn { font: inherit; font-size: 13px; padding: 6px 11px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--ink); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible, label:focus-within { outline: 2px solid var(--accent); outline-offset: 1px; }
+.btn { font: inherit; font-size: 13px; padding: 6px 11px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--ink); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; text-decoration: none; }
 .btn:hover { border-color: var(--accent); }
 .btn[aria-expanded="true"] { background: var(--accent-soft); border-color: var(--accent); }
+.btn.primary { background: var(--accent); color: var(--panel); border-color: var(--accent); }
 .btns { display: flex; flex-wrap: wrap; gap: 6px; }
 .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
 .hint { color: var(--ink-3); font-size: 12.5px; margin: 0 0 10px; }
@@ -54,7 +56,9 @@ button:focus-visible, select:focus-visible, input:focus-visible, label:focus-wit
 input[type=file] { display: none; }
 .in, select.in { font: inherit; font-size: 12.5px; padding: 4px 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--panel); color: var(--ink); }
 .in.w { width: 120px; }
+.in.ww { width: 190px; }
 .num-in { width: 72px; font-family: var(--mono); }
+code { font-family: var(--mono); font-size: .92em; }
 
 /* samples */
 .samples { display: grid; gap: 10px; }
@@ -69,18 +73,20 @@ input[type=file] { display: none; }
 .chip.off svg { opacity: .25; }
 .chip.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 
+/* panels editor */
+.panels { display: grid; gap: 10px; }
+.pnl { border: 1px solid var(--line); border-radius: 8px; padding: 10px; display: grid; gap: 8px; }
+.pnl-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
+.item { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; font-size: 12.5px; padding: 6px 8px; background: var(--bg); border-radius: 6px; }
+.item .sig { font-weight: 600; min-width: 120px; display: inline-flex; align-items: center; gap: 6px; }
+.offsets { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
+
 /* plot + tables */
 #plot { width: 100%; min-height: 420px; }
 .readout { font-family: var(--mono); font-size: 13px; color: var(--ink); overflow-wrap: anywhere; min-width: 0; flex: 1 1 280px; }
 .plotbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; margin-bottom: 8px;
   position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--panel); padding-block: 6px; }
 .zoombar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
-.picdlg { position: fixed; z-index: 31; inset: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
-  max-width: 1100px; margin: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; overflow: auto; }
-#picScrim { z-index: 30; }
-.picwrap { border: 1px solid var(--line); border-radius: 6px; background: #ffffff; overflow: auto; }
-.picwrap img { display: block; width: 100%; height: auto; }
-td.pk { color: var(--ink-3); }
 .split { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 @media (max-width: 860px) { .split { grid-template-columns: 1fr; } }
 .tbl { overflow-x: auto; }
@@ -89,9 +95,11 @@ th { text-align: left; font-weight: 500; color: var(--ink-3); font-size: 11px; t
 td { padding: 5px 8px; border-bottom: 1px solid var(--grid); white-space: nowrap; vertical-align: middle; }
 td.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
 td.hi { color: var(--warn); font-weight: 600; }
+td.pk { color: var(--ink-3); }
 td .dot, .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
 tr.excluded td { color: var(--ink-3); }
 tr.excluded td .in { opacity: .5; }
+tr.sub td { border-bottom: 0; padding-top: 0; }
 .link { background: none; border: 0; padding: 0; font: inherit; color: var(--accent); cursor: pointer; text-align: left; }
 .link:hover { text-decoration: underline; }
 .x { background: none; border: 0; color: var(--ink-3); cursor: pointer; font-size: 15px; padding: 0 4px; }
@@ -99,23 +107,31 @@ tr.excluded td .in { opacity: .5; }
 .pill { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); color: var(--ink-2); }
 .pill.bio { border-color: var(--accent); color: var(--accent); }
 .pill.blank { background: var(--accent-soft); border-color: transparent; color: var(--ink-2); }
+.pill.warn { border-color: var(--warn); color: var(--warn); }
 .status { font-size: 12.5px; color: var(--ink-2); min-height: 1em; }
 
-/* sample info sheet */
+/* sheets & dialogs */
 .scrim { position: fixed; inset: 0; background: var(--scrim); z-index: 20; }
 .sheet { position: fixed; z-index: 21; background: var(--panel); border-left: 1px solid var(--line); overflow-y: auto;
-  top: 0; right: 0; bottom: 0; width: min(440px, 100%);
+  top: 0; right: 0; bottom: 0; width: min(460px, 100%);
   padding: calc(16px + env(safe-area-inset-top, 0px)) calc(18px + env(safe-area-inset-right, 0px)) calc(24px + env(safe-area-inset-bottom, 0px)) 18px; }
 @media (max-width: 600px) { .sheet { top: auto; left: 0; width: auto; max-height: 82%; border-left: 0; border-top: 1px solid var(--line);
   border-radius: 12px 12px 0 0; padding-left: calc(16px + env(safe-area-inset-left, 0px)); } }
+.dlg { position: fixed; z-index: 31; inset: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+  max-width: 1100px; margin: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; overflow: auto; }
+.dlg-scrim { z-index: 30; }
+.picwrap { border: 1px solid var(--line); border-radius: 6px; background: #ffffff; overflow: auto; }
+.picwrap img { display: block; width: 100%; height: auto; }
 pre.raw { font-family: var(--mono); font-size: 11.5px; background: var(--bg); border: 1px solid var(--line); border-radius: 6px;
   padding: 8px 10px; margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+pre.raw.lines { white-space: pre; overflow: auto; max-height: 340px; }
 dl.kv { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 0; font-size: 12.5px; }
 dl.kv dt { color: var(--ink-3); }
 dl.kv dd { margin: 0; overflow-wrap: anywhere; }
 .form { display: grid; grid-template-columns: max-content 1fr; gap: 8px 12px; align-items: start; font-size: 12.5px; }
-.form label { padding-top: 5px; }
-.form label { color: var(--ink-3); }
+.form > label { padding-top: 5px; color: var(--ink-3); }
+.imp-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 16px; margin-top: 10px; }
+@media (max-width: 860px) { .imp-grid { grid-template-columns: 1fr; } }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 
@@ -127,32 +143,49 @@ dl.kv dd { margin: 0; overflow-wrap: anywhere; }
     </div>
     <div class="btns">
       <button class="btn" id="mgrBtn" aria-expanded="false" aria-controls="mgr">Files &amp; samples</button>
+      <button class="btn" id="pnlBtn" aria-expanded="false" aria-controls="pnlCard">Panels &amp; offsets</button>
     </div>
   </header>
 
-  <!-- File & sample manager (toggle) -->
+  <!-- File & sample manager -->
   <section class="card" id="mgr" hidden aria-label="Files and samples">
     <div class="row" style="align-items:flex-start">
       <div style="min-width:0;flex:1 1 320px">
         <h2>Files &amp; samples</h2>
-        <p class="hint" style="margin:0">Add or remove files without reloading the batch. Edit role, type, biological sample and blank for each run; edits are remembered in this browser.
-          Runs that share a <b>biological sample</b> are technical replicates (repeat injections of the same material); different biological samples within a type are biological replicates.</p>
+        <p class="hint" style="margin:0">Each file is listed under the run it belongs to. Files with the same <b>run name</b> are merged, so an ICP-MS file and a DAD file from one injection become one run; rename a file's run to pair them.
+          Runs that share a <b>biological sample</b> are technical replicates; different biological samples within a type are biological replicates. Edits are remembered in this browser.</p>
       </div>
       <div class="btns">
-        <label class="btn" for="addFiles">Add files…</label><input type="file" id="addFiles" accept=".csv,text/csv" multiple>
-        <label class="btn" for="replaceFiles">Replace all…</label><input type="file" id="replaceFiles" accept=".csv,text/csv" multiple>
+        <label class="btn" for="addFiles">Add files…</label><input type="file" id="addFiles" accept=".csv,.txt,.tsv,text/csv,text/plain" multiple>
+        <label class="btn" for="replaceFiles">Replace all…</label><input type="file" id="replaceFiles" accept=".csv,.txt,.tsv,text/csv,text/plain" multiple>
+        <label class="btn" for="customFiles">Import with custom format…</label><input type="file" id="customFiles" accept=".csv,.txt,.tsv,text/csv,text/plain">
         <button class="btn" id="copySheet">Copy sample sheet</button>
         <button class="btn" id="resetEdits">Reset edits</button>
       </div>
     </div>
     <div class="status" id="mgrStatus" role="status" style="margin-top:8px"></div>
+    <div id="pendingBox"></div>
     <div class="tbl" style="margin-top:6px"><table id="mgrTbl"></table></div>
-    <p class="note" style="margin:8px 0 0">Tip: you can also add <code>BatchLog.csv</code> (queue comments, vial, result) and a <code>sample_sheet.csv</code> from the Python script; both are applied to the runs already loaded.</p>
+    <div id="fmtBox"></div>
+    <p class="note" style="margin:8px 0 0">Recognized automatically: Agilent ICP-MS “Intensity Vs Time” exports, Agilent DAD signal exports (one block per wavelength), <code>BatchLog.csv</code> and <code>sample_sheet.csv</code>. Anything else opens the import editor, where you can set the layout once and save it as a format.</p>
+  </section>
+
+  <!-- Panels & offsets -->
+  <section class="card" id="pnlCard" hidden aria-label="Panels and offsets">
+    <div class="row" style="align-items:flex-start">
+      <div style="min-width:0;flex:1 1 320px"><h2>Panels &amp; offsets</h2>
+        <p class="hint" style="margin:0">Choose what is stacked in each panel and how each trace is scaled. A panel with several signals colours by signal (runs differ by dash). <b>% of max</b> scales each trace so its own tallest point is 100; <b>× factor</b> multiplies; <b>shift</b> moves a trace up or down.</p></div>
+      <div class="btns"><button class="btn" id="addPanel">Add panel</button><button class="btn" id="autoPanels">One panel per signal</button></div>
+    </div>
+    <div class="panels" id="panels" style="margin-top:10px"></div>
+    <h3>Detector time offsets</h3>
+    <p class="hint">Seconds added to every time point of that detector, to line up detectors plumbed in series (e.g. DAD before ICP-MS). Positive moves its peaks later.</p>
+    <div class="offsets" id="offsets"></div>
   </section>
 
   <section class="card controls" aria-label="Display options">
     <div class="ctl"><span class="lbl">Method</span><div class="seg" id="methodSeg"></div></div>
-    <div class="ctl"><span class="lbl">Metals</span><div class="seg" id="metalSeg"></div></div>
+    <div class="ctl" id="sigCtl"><span class="lbl">Signals</span><div class="seg" id="sigSeg"></div></div>
     <div class="ctl"><span class="lbl">Blank subtraction</span><div class="seg" id="blankSeg"></div></div>
     <div class="ctl"><span class="lbl">Time axis</span><div class="seg" id="unitSeg"></div></div>
     <div class="ctl"><span class="lbl">Y axis</span><div class="seg" id="ySeg"></div></div>
@@ -170,7 +203,7 @@ dl.kv dd { margin: 0; overflow-wrap: anywhere; }
 
   <section class="card" aria-label="Chromatograms">
     <div class="plotbar">
-      <div class="readout" id="readout">Hover or tap the plot to read exact time and CPS. Click a point to mark it.</div>
+      <div class="readout" id="readout">Hover or tap the plot to read exact time and signal. Click a point to mark it.</div>
       <div class="zoombar"><span class="lbl">Zoom acts on</span><div class="seg" id="zoomSeg"></div><button class="btn" id="resetZoom">Reset zoom</button><button class="btn" id="savePic">Save picture</button></div>
     </div>
     <div id="plot"></div>
@@ -186,15 +219,15 @@ dl.kv dd { margin: 0; overflow-wrap: anywhere; }
     </div>
     <div class="tbl" style="margin-top:10px"><table id="carryTbl"></table></div>
     <h2 style="margin-top:18px">Background through the queue</h2>
-    <p class="hint">Median raw CPS over the first 60 s of each run (before anything elutes), in acquisition order. A rising line means metal building up in the system; open circles are blanks.</p>
+    <p class="hint">Median raw signal over the first 60 s of each run (before anything elutes), in acquisition order. A rising line means something building up in the system; open circles are blanks.</p>
     <div id="bgPlot"></div>
   </section>
 
   <section class="card" aria-label="Peak table">
     <div class="row" style="align-items:flex-end">
       <div style="min-width:0;flex:1 1 340px"><h2>Peaks in current view</h2>
-        <p class="hint" style="margin:0">Every peak found in each visible trace inside the zoomed time range. Zoom in to limit the range; lower the size cut-off to catch small shoulders, raise it to ignore noise.
-          Area and height use a straight baseline drawn between the valleys on either side of each peak.</p></div>
+        <p class="hint" style="margin:0">Every peak in each visible trace inside the zoomed time range, measured on the traces as displayed (after blank subtraction and any scaling). Lower the size cut-off to catch shoulders, raise it to ignore noise.
+          Area and height use a straight baseline between the valleys on either side of each peak.</p></div>
       <div class="btns" style="align-items:flex-end">
         <div class="ctl"><label class="lbl" for="prom">Min. peak size (% of tallest)</label><input id="prom" type="number" class="in num-in" min="0.5" max="90" step="0.5" value="5"></div>
         <div class="ctl"><span class="lbl">Peaks on plot</span><div class="seg" id="peakMarkSeg"></div></div>
@@ -208,15 +241,17 @@ dl.kv dd { margin: 0; overflow-wrap: anywhere; }
   <div class="split">
     <section class="card">
       <div class="row"><h2>Marked points</h2><span class="btns"><button class="btn" id="copyMarks">Copy table</button><button class="btn" id="clearMarks">Clear</button></span></div>
-      <p class="hint">Click any point on a trace to pin its exact time and intensity here.</p>
+      <p class="hint">Click any point on a trace to pin its exact time and value here.</p>
       <div class="tbl"><table id="markTbl"></table></div>
     </section>
   </div>
 </div>
 
 <div class="scrim" id="scrim" hidden></div>
-<div class="scrim" id="picScrim" hidden></div>
-<div class="picdlg" id="picDlg" hidden role="dialog" aria-modal="true" aria-labelledby="picTitle">
+<aside class="sheet" id="sheet" hidden role="dialog" aria-modal="true" aria-labelledby="sheetTitle"></aside>
+
+<div class="scrim dlg-scrim" id="picScrim" hidden></div>
+<div class="dlg" id="picDlg" hidden role="dialog" aria-modal="true" aria-labelledby="picTitle">
   <div class="row" style="flex-wrap:nowrap"><h2 id="picTitle" style="margin:0">Save picture</h2><button class="btn" id="picClose">Close</button></div>
   <div class="row" style="margin-top:10px">
     <div class="btns">
@@ -229,27 +264,50 @@ dl.kv dd { margin: 0; overflow-wrap: anywhere; }
   <p class="note" style="margin:8px 0">You can also right-click the picture and choose <b>Save image as…</b>, or long-press it on a phone. <b>Copy image</b> pastes straight into PowerPoint or a doc.</p>
   <div class="picwrap"><img id="picImg" alt="Exported chromatogram view"></div>
 </div>
-<aside class="sheet" id="sheet" hidden role="dialog" aria-modal="true" aria-labelledby="sheetTitle"></aside>
+
+<div class="scrim dlg-scrim" id="impScrim" hidden></div>
+<div class="dlg" id="impDlg" hidden role="dialog" aria-modal="true" aria-labelledby="impTitle"></div>
 
 <script>
 const EMBEDDED = /*__DATA__*/null;
 
-/* ================= parsing ================= */
-function splitCsvLine(line) {
+/* =====================================================================
+   PARSING
+   Every file becomes a FileRec: { fname, kind, run, path, acquired, header, footer, signals[] }
+   Each signal: { key, det, name, unit, t (seconds, unshifted), y }
+   ===================================================================== */
+function splitDelim(line, d) {
+  if (d === "ws") return line.trim().split(/\s+/);
   const out = []; let cur = "", q = false;
   for (let i = 0; i < line.length; i++) {
     const ch = line[i];
     if (q) { if (ch === '"') { if (line[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += ch; }
-    else if (ch === '"') q = true; else if (ch === ",") { out.push(cur); cur = ""; } else cur += ch;
+    else if (ch === '"') q = true; else if (ch === d) { out.push(cur); cur = ""; } else cur += ch;
   }
   out.push(cur); return out;
 }
-function parseChromatogram(text, fname) {
-  const lines = text.replace(/^﻿/, "").split(/\r?\n/);
-  let name = fname.replace(/\.csv$/i, ""), acquired = null, hdr = -1, path = null;
+const linesOf = text => text.replace(/^﻿/, "").split(/\r?\n/);
+const isNum = v => v !== "" && v != null && !isNaN(+v);
+const dname = p => p.split(/[\\/]/).pop().replace(/\.d$/i, "");
+const MAXPTS = 8000;
+function decimate(t, y) {   // bin-average very dense traces (e.g. 40 Hz DAD) so plots stay fast
+  if (t.length <= MAXPTS * 1.5) return [t, y];
+  const k = Math.ceil(t.length / MAXPTS), T = [], Y = [];
+  for (let i = 0; i < t.length; i += k) {
+    let st = 0, sy = 0, n = 0; for (let j = i; j < Math.min(t.length, i + k); j++) { st += t[j]; sy += y[j]; n++; }
+    T.push(st / n); Y.push(sy / n);
+  }
+  return [T, Y];
+}
+function mkSignal(det, name, unit, t, y) { const [T, Y] = decimate(t, y); return { key: `${det} · ${name}`, det, name, unit, t: T, y: Y }; }
+
+/* Agilent ICP-MS (MassHunter) "Intensity Vs Time" export */
+function parseICP(text, fname) {
+  const lines = linesOf(text);
+  let run = fname.replace(/\.(csv|txt)$/i, ""), acquired = null, hdr = -1, path = null;
   for (let i = 0; i < Math.min(20, lines.length); i++) {
     const first = lines[i].split(",")[0].trim();
-    if (/\.d$/i.test(first)) { path = first; name = first.split(/[\\/]/).pop().slice(0, -2); }
+    if (/\.d$/i.test(first)) { path = first; run = dname(first); }
     const m = lines[i].match(/(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})/);
     if (/acquired/i.test(lines[i]) && m) acquired = m[1];
     if (/^time/i.test(first)) { hdr = i; break; }
@@ -260,30 +318,85 @@ function parseChromatogram(text, fname) {
   const data = cols.map(() => []); let end = lines.length;
   for (let i = hdr + 1; i < lines.length; i++) {
     const p = lines[i].split(",").slice(0, cols.length).map(s => s.trim());
-    if (p.length < cols.length || p.some(v => v === "" || isNaN(+v))) { end = i; break; }
+    if (p.length < cols.length || !p.every(isNum)) { end = i; break; }
     p.forEach((v, j) => data[j].push(+v));
   }
   if (!data[0].length) return null;
-  const run = { file: fname, name, path, acquired, t: data[0], metals: {}, columns: cols,
-    header: lines.slice(0, hdr + 1).map(l => l.replace(/,+\s*$/, "")),
-    footer: lines.slice(end).map(l => l.trim()).filter(Boolean) };
-  cols.slice(1).forEach((c, j) => run.metals[c] = data[j + 1]);
-  return run;
+  const tmul = /min/i.test(cols[0]) ? 60 : 1, t = data[0].map(v => v * tmul);
+  return { fname, kind: "ICP-MS export", run, path, acquired,
+    header: lines.slice(0, hdr + 1).map(l => l.replace(/,+\s*$/, "")), footer: lines.slice(end).map(l => l.trim()).filter(Boolean),
+    signals: cols.slice(1).map((c, j) => mkSignal("ICP-MS", c, "CPS", t, data[j + 1])) };
+}
+
+/* Agilent ChemStation / OpenLab DAD export: blocks of  #"DAD1 - E:Sig=280.0,4.0  Ref=off <name>.d"  then  #Point,X(Minutes),Y(...)  */
+function parseDAD(text, fname) {
+  const lines = linesOf(text);
+  if (!lines.slice(0, 3).some(l => /^#"?.*Sig=/.test(l))) return null;
+  const sigs = [], header = []; let cur = null, run = null, path = null, tmul = 60;
+  for (const raw of lines) {
+    const l = raw.trim(); if (!l) continue;
+    if (l.startsWith("#")) {
+      header.push(l);
+      const m = l.match(/Sig=([\d.]+)(?:,([\d.]+))?/);
+      if (m) {
+        const det = (l.match(/^#"?\s*([A-Za-z]+\d*)/) || [, "DAD"])[1].replace(/\d+$/, "") || "DAD";
+        const ref = (l.match(/Ref=([^\s"]+)/) || [, ""])[1];
+        const dm = l.match(/([^\s"\\/]+\.d)\b/); if (dm) { run = run || dname(dm[1]); path = path || dm[1]; }
+        cur = { det, name: `${+m[1]} nm`, bw: m[2], ref, t: [], y: [] }; sigs.push(cur);
+      } else if (/X\((\w+)\)/.test(l)) tmul = /sec/i.test(l.match(/X\((\w+)\)/)[1]) ? 1 : 60;
+      continue;
+    }
+    if (!cur) continue;
+    const p = l.split(",");
+    if (p.length >= 3 && isNum(p[1]) && isNum(p[2])) { cur.t.push(+p[1] * tmul); cur.y.push(+p[2]); }
+  }
+  const good = sigs.filter(s => s.t.length > 5);
+  if (!good.length) return null;
+  return { fname, kind: "DAD export", run: run || fname.replace(/\.(csv|txt)$/i, ""), path, acquired: null, header, footer: [],
+    signals: good.map(s => mkSignal(s.det, s.name, "mAU", s.t, s.y)),
+    extra: good.map(s => `${s.name}: bandwidth ${s.bw || "?"} nm, reference ${s.ref || "?"}`) };
+}
+
+/* Generic table parsed with a saved format (from the import editor) */
+function guessDelim(lines) {
+  const sample = lines.slice(0, 40).join("\n");
+  const c = { ",": (sample.match(/,/g) || []).length, "\t": (sample.match(/\t/g) || []).length, ";": (sample.match(/;/g) || []).length };
+  const best = Object.entries(c).sort((a, b) => b[1] - a[1])[0];
+  return best[1] ? best[0] : "ws";
+}
+function parseWithFormat(text, fname, f) {
+  const lines = linesOf(text); const d = f.delim === "auto" ? guessDelim(lines) : f.delim;
+  const hdrIdx = f.headerRow > 0 ? f.headerRow - 1 : -1, start = Math.max(0, (f.dataRow || (hdrIdx + 2)) - 1);
+  const names = hdrIdx >= 0 ? splitDelim(lines[hdrIdx] || "", d).map(s => s.trim().replace(/^#/, "")) : [];
+  const cols = f.signals.filter(s => s.use);
+  const T = [], Ys = cols.map(() => []);
+  for (let i = start; i < lines.length; i++) {
+    if (!lines[i].trim()) { if (T.length) break; else continue; }
+    const p = splitDelim(lines[i], d).map(s => s.trim());
+    if (!isNum(p[f.timeCol])) { if (T.length) break; else continue; }
+    T.push(+p[f.timeCol] * (f.timeUnit === "min" ? 60 : f.timeUnit === "ms" ? 0.001 : 1));
+    cols.forEach((c, j) => Ys[j].push(isNum(p[c.col]) ? +p[c.col] : NaN));
+  }
+  if (T.length < 5 || !cols.length) return null;
+  let run = fname.replace(/\.(csv|txt|tsv)$/i, "");
+  if (f.runFrom === "line" && lines[f.runLine - 1]) { const l = lines[f.runLine - 1]; const dm = l.match(/([^\s"\\/,]+)\.d\b/); run = dm ? dm[1] : l.replace(/["#]/g, "").trim() || run; }
+  return { fname, kind: `format “${f.name}”`, run, path: null, acquired: null,
+    header: lines.slice(0, start).filter(l => l.trim()).slice(0, 20), footer: [],
+    signals: cols.map((c, j) => mkSignal(f.det || "Detector", c.name || names[c.col] || `col ${c.col + 1}`, f.unit || "", T, Ys[j])) };
 }
 function parseTable(text) {
-  const lines = text.replace(/^﻿/, "").split(/\r?\n/).filter(l => l.trim());
+  const lines = linesOf(text).filter(l => l.trim());
   if (!lines.length) return null;
-  const head = splitCsvLine(lines[0]).map(s => s.trim());
-  return { head, rows: lines.slice(1).map(l => { const c = splitCsvLine(l); const o = {}; head.forEach((h, i) => o[h] = (c[i] ?? "").trim()); return o; }) };
+  const head = splitDelim(lines[0], ",").map(s => s.trim());
+  return { head, rows: lines.slice(1).map(l => { const c = splitDelim(l, ","); const o = {}; head.forEach((h, i) => o[h] = (c[i] ?? "").trim()); return o; }) };
 }
-const isBlankName = n => /blank/i.test(n);
-const guessType = n => isBlankName(n) ? "Blank" : (n.replace(/_\d+$/, "").replace(/-\d+$/, "") || n);
-const guessBio = n => n.replace(/_\d+$/, "") || n;   // HumanCtrl_1 & _2 -> same material; NASH-01_1 -> NASH-01
 
-/* ================= state ================= */
-let RUNS = [], METHODS = [], METALS = [], BATCHLOG = {}, LABEL = "";
-const S = { peakMarks: true, zoom: "x", method: null, metals: new Set(), blank: "nearest", unit: "min", y: "linear", view: "runs", showBlanks: false,
-  hidden: new Set(), marks: [], selected: null };
+/* =====================================================================
+   STATE
+   ===================================================================== */
+let FILES = [], RUNS = [], METHODS = [], SIGNALS = [], DETS = [], BATCHLOG = {}, LABEL = "", PENDING = [];
+const S = { peakMarks: true, zoom: "x", method: null, sigOn: new Set(), blank: "nearest", unit: "min", y: "linear", view: "runs", showBlanks: false,
+  hidden: new Set(), marks: [], selected: null, layout: "auto", panels: [], offsets: {} };
 const store = {
   get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} },
@@ -291,83 +404,131 @@ const store = {
 };
 Object.assign(S, (({ blank, unit, y, zoom }) => ({ ...(blank && { blank }), ...(unit && { unit }), ...(y && { y }), ...(zoom && { zoom }) }))(store.get("icpms-viewer", {})));
 const savePrefs = () => store.set("icpms-viewer", { blank: S.blank, unit: S.unit, y: S.y, zoom: S.zoom });
-const editKey = () => "icpms-edits:" + LABEL;
-let EDITS = {};
-const META = ["role", "type", "bio", "blankUse", "include"];
-function saveEdit(run) { EDITS[run.name] = Object.fromEntries(META.map(k => [k, run[k]])); store.set(editKey(), EDITS); }
-function defaults(run) {
-  run.role = isBlankName(run.name) ? "blank" : "sample";
-  run.type = guessType(run.name); run.bio = guessBio(run.name); run.blankUse = "auto"; run.include = true;
-}
-function applyEdits(run) { const e = EDITS[run.name]; if (e) META.forEach(k => { if (e[k] !== undefined) run[k] = e[k]; }); }
+let FORMATS = store.get("lc-viewer-formats", []);
+const saveFormats = () => store.set("lc-viewer-formats", FORMATS);
 
+/* per-batch edits: run metadata, file -> run pairing, panels, offsets */
+const editKey = () => "icpms-edits:" + LABEL;
+let EDITS = { runs: {}, files: {}, layout: null, offsets: null };
+function loadEdits() {
+  const e = store.get(editKey(), {});
+  EDITS = e.runs ? e : { runs: e, files: {} };   // older versions stored run edits flat
+  if (EDITS.layout) { S.layout = EDITS.layout.mode; S.panels = EDITS.layout.panels || []; }
+  if (EDITS.offsets) S.offsets = { ...EDITS.offsets };
+}
+const saveEdits = () => store.set(editKey(), EDITS);
+const META = ["role", "type", "bio", "blankUse", "include"];
+const isBlankName = n => /blank/i.test(n);
+const guessType = n => isBlankName(n) ? "Blank" : (n.replace(/_\d+$/, "").replace(/-\d+$/, "") || n);
+const guessBio = n => n.replace(/_\d+$/, "") || n;
+function runMeta(name) {
+  const d = { role: isBlankName(name) ? "blank" : "sample", type: guessType(name), bio: guessBio(name), blankUse: "auto", include: true };
+  return { ...d, ...(EDITS.runs[name] || {}) };
+}
+function setMeta(name, patch) { EDITS.runs[name] = { ...runMeta(name), ...patch }; saveEdits(); }
 function setStatus(msg) { document.getElementById("mgrStatus").textContent = msg; }
 
-/* add or replace files */
+/* =====================================================================
+   LOADING
+   ===================================================================== */
+function recognise(text, fname) {
+  const icp = parseICP(text, fname); if (icp) return icp;
+  const dad = parseDAD(text, fname); if (dad) return dad;
+  const head = linesOf(text).slice(0, 8).join("\n");
+  for (const f of FORMATS) if (f.match && head.includes(f.match)) { const r = parseWithFormat(text, fname, f); if (r) return r; }
+  return null;
+}
 async function ingest(files, replace) {
   const texts = await Promise.all(files.map(async f => ({ name: f.name, text: typeof f.text === "string" ? f.text : await f.text() })));
-  if (replace) { RUNS = []; BATCHLOG = {}; S.marks = []; S.hidden = new Set(); xRange = null; }
-  let added = 0, replaced = 0, sheets = 0, logs = 0; const skipped = [];
-  const pendingSheets = [];
+  if (replace) { FILES = []; BATCHLOG = {}; S.marks = []; S.hidden = new Set(); xRange = null; PENDING = []; }
+  let added = 0, replaced = 0, sheets = 0, logs = 0; const unknown = [], pendingSheets = [];
   for (const f of texts) {
-    const run = parseChromatogram(f.text, f.name);
-    if (run) {
-      defaults(run); applyEdits(run);
-      const i = RUNS.findIndex(r => r.name === run.name);
-      if (i >= 0) { RUNS[i] = run; replaced++; } else { RUNS.push(run); added++; }
+    const rec = recognise(f.text, f.name);
+    if (rec) {
+      rec.text = f.text.length < 400000 ? f.text : null;  // keep small raw files for the editor
+      rec.origRun = rec.run; if (EDITS.files[rec.fname]) rec.run = EDITS.files[rec.fname];
+      const i = FILES.findIndex(x => x.fname === rec.fname);
+      if (i >= 0) { FILES[i] = rec; replaced++; } else { FILES.push(rec); added++; }
       continue;
     }
     const tb = parseTable(f.text);
     if (tb && tb.head.includes("File Name") && tb.head.includes("Acquisition Result")) {
-      tb.rows.forEach(r => { if (r["Acquisition Result"] !== "Pass") return;
-        const n = r["File Name"].split(/[\\/]/).pop().replace(/\.d$/i, ""); BATCHLOG[n] = r; });
-      logs++; continue;
+      tb.rows.forEach(r => { if (r["Acquisition Result"] === "Pass") BATCHLOG[dname(r["File Name"])] = r; }); logs++; continue;
     }
-    if (tb && tb.head.map(h => h.toLowerCase()).includes("sample") && tb.head.map(h => h.toLowerCase()).includes("type")) { pendingSheets.push(tb); sheets++; continue; }
-    skipped.push(f.name);
+    const low = tb ? tb.head.map(h => h.toLowerCase()) : [];
+    if (low.includes("sample") && low.includes("type")) { pendingSheets.push(tb); sheets++; continue; }
+    unknown.push(f);
   }
-  pendingSheets.forEach(applySheet);
   finishLoad();
+  pendingSheets.forEach(applySheet); if (pendingSheets.length) finishLoad();
+  PENDING.push(...unknown.filter(u => !PENDING.some(p => p.name === u.name)));
+  drawPending();
   const bits = [];
-  if (added) bits.push(`${added} run(s) added`); if (replaced) bits.push(`${replaced} replaced`);
+  if (added) bits.push(`${added} file(s) added`); if (replaced) bits.push(`${replaced} replaced`);
   if (logs) bits.push("batch log read"); if (sheets) bits.push("sample sheet applied");
-  if (skipped.length) bits.push(`skipped ${skipped.join(", ")} (not a chromatogram, batch log or sample sheet)`);
+  if (unknown.length) bits.push(`${unknown.length} file(s) need a format (see below)`);
   setStatus(bits.join(" · ") || "Nothing loaded.");
+  if (unknown.length === 1 && !replace && !EMBEDDED_BOOT) openImport(unknown[0]);
 }
 function applySheet(tb) {
   const lc = o => Object.fromEntries(Object.entries(o).map(([k, v]) => [k.toLowerCase(), v]));
   const yes = v => /^(yes|y|true|1)$/i.test(v || "");
   tb.rows.map(lc).forEach(r => {
-    const run = RUNS.find(x => x.name === r.sample); if (!run) return;
-    if (r.type) run.type = r.type;
-    if (r.blank !== undefined && r.blank !== "") run.role = yes(r.blank) ? "blank" : "sample";
-    if (r.include !== undefined && r.include !== "") run.include = yes(r.include);
-    if (r.bio_sample) run.bio = r.bio_sample;
-    if (r.blank_used) run.blankUse = /^auto$/i.test(r.blank_used) ? "auto" : /^none$/i.test(r.blank_used) ? "none" : r.blank_used;
-    saveEdit(run);
+    if (!RUNS.some(x => x.name === r.sample)) return;
+    const p = {};
+    if (r.type) p.type = r.type;
+    if (r.blank !== undefined && r.blank !== "") p.role = yes(r.blank) ? "blank" : "sample";
+    if (r.include !== undefined && r.include !== "") p.include = yes(r.include);
+    if (r.bio_sample) p.bio = r.bio_sample;
+    if (r.blank_used) p.blankUse = /^auto$/i.test(r.blank_used) ? "auto" : /^none$/i.test(r.blank_used) ? "none" : r.blank_used;
+    setMeta(r.sample, p);
   });
 }
-function finishLoad() {
-  RUNS.forEach(r => r.method = Math.round(r.t[r.t.length - 1] / 10) * 10);
-  RUNS.sort((a, b) => (a.acquired || "").localeCompare(b.acquired || "") || a.name.localeCompare(b.name));
+function derive() {
+  const byName = new Map();
+  FILES.forEach(f => {
+    if (!byName.has(f.run)) byName.set(f.run, { name: f.run, files: [], signals: {}, acquired: null });
+    const r = byName.get(f.run); r.files.push(f);
+    if (f.acquired && (!r.acquired || f.acquired < r.acquired)) r.acquired = f.acquired;
+    f.signals.forEach(s => {
+      const off = +S.offsets[s.det] || 0;
+      r.signals[s.key] = off ? { ...s, t: s.t.map(v => v + off) } : s;
+    });
+  });
+  RUNS = [...byName.values()].map(r => Object.assign(r, runMeta(r.name)));
+  RUNS.forEach(r => { const end = Math.max(...Object.values(r.signals).map(s => s.t[s.t.length - 1])); r.method = Math.round(end / 10) * 10; });
+  RUNS.sort((a, b) => (a.acquired || "~").localeCompare(b.acquired || "~") || a.name.localeCompare(b.name));
   METHODS = [...new Set(RUNS.map(r => r.method))].sort((a, b) => b - a);
-  const metals = [...new Set(RUNS.flatMap(r => Object.keys(r.metals)))];
-  const fresh = metals.filter(m => !METALS.includes(m));
-  METALS = metals; fresh.forEach(m => S.metals.add(m)); [...S.metals].forEach(m => !METALS.includes(m) && S.metals.delete(m));
-  if (!S.metals.size) METALS.forEach(m => S.metals.add(m));
-  if (!METHODS.includes(S.method)) S.method = METHODS[0];
+  const all = new Map(); RUNS.forEach(r => Object.values(r.signals).forEach(s => all.set(s.key, s)));
+  SIGNALS = [...all.values()].sort((a, b) => detRank(a.det) - detRank(b.det) || sigSort(a, b)).map(s => ({ key: s.key, det: s.det, name: s.name, unit: s.unit }));
+  DETS = [...new Set(SIGNALS.map(s => s.det))];
+  const keys = SIGNALS.map(s => s.key);
+  [...S.sigOn].forEach(k => !keys.includes(k) && S.sigOn.delete(k));
+  keys.forEach(k => { if (!SEEN_SIG.has(k)) { SEEN_SIG.add(k); S.sigOn.add(k); } });
+  if (!S.sigOn.size) keys.forEach(k => S.sigOn.add(k));
+  if (S.method !== "all" && !METHODS.includes(S.method)) S.method = METHODS[0];
+  S.panels.forEach(p => p.items = p.items.filter(it => keys.includes(it.key)));
+}
+const SEEN_SIG = new Set();
+const detRank = d => d === "ICP-MS" ? 0 : d === "DAD" ? 1 : 2;
+const sigSort = (a, b) => (parseFloat(a.name.replace(/\D+/g, " ")) || 0) - (parseFloat(b.name.replace(/\D+/g, " ")) || 0) || a.name.localeCompare(b.name);
+function finishLoad() {
+  derive();
+  const used = RUNS.filter(r => r.include).length;
   document.getElementById("batchInfo").textContent = RUNS.length
-    ? `${LABEL} · ${RUNS.length} runs (${RUNS.filter(r => r.include).length} included) · ${METALS.join(", ")}`
-    : "No data loaded. Open Files & samples to add CSV exports.";
-  buildControls(); buildManager(); render();
+    ? `${LABEL} · ${RUNS.length} runs (${used} included) · ${DETS.map(d => `${d}: ${SIGNALS.filter(s => s.det === d).map(s => s.name).join(", ")}`).join(" · ")}`
+    : "No data loaded. Open Files & samples to add exports.";
+  buildControls(); buildManager(); buildPanels(); render();
 }
 
-/* ================= helpers ================= */
+/* =====================================================================
+   HELPERS
+   ===================================================================== */
 const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 const SLOTS = ["--s1", "--s2", "--s3", "--s4", "--s5", "--s6", "--s7", "--s8"];
 const DASHES = ["solid", "dash", "dot", "dashdot", "longdash", "longdashdot"];
 const SVG_DASH = { solid: "", dash: "5 3", dot: "1.5 2.5", dashdot: "5 2 1.5 2", longdash: "9 3", longdashdot: "9 2 1.5 2" };
-const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 function interp(x, xs, ys) {
   const out = new Array(x.length); let j = 0;
   for (let i = 0; i < x.length; i++) {
@@ -380,7 +541,7 @@ function interp(x, xs, ys) {
   return out;
 }
 const used = () => RUNS.filter(r => r.include);
-const methodRuns = () => used().filter(r => r.method === S.method);
+const methodRuns = () => S.method === "all" ? used() : used().filter(r => r.method === S.method);
 const scopeRuns = () => S.view === "order" ? used() : methodRuns();
 const isBlank = r => r.role === "blank";
 const hhmm = r => r.acquired ? r.acquired.slice(11, 16) : "";
@@ -388,22 +549,16 @@ const tx = t => S.unit === "min" ? t / 60 : t;
 const unitLbl = () => S.unit === "min" ? "min" : "s";
 const fmtT = t => S.unit === "min" ? (t / 60).toFixed(3) + " min" : t.toFixed(2) + " s";
 const fmtBoth = t => `${t.toFixed(2)} s · ${(t / 60).toFixed(3)} min`;
-const fmtC = v => Math.round(v).toLocaleString("en-US");
+const fmtV = v => { const a = Math.abs(v); return a >= 1000 ? Math.round(v).toLocaleString("en-US") : a >= 10 ? v.toFixed(1) : a >= 0.1 ? v.toFixed(3) : v.toPrecision(3); };
+const sigInfo = k => SIGNALS.find(s => s.key === k) || { key: k, det: "", name: k, unit: "" };
 
-/* replicate structure: type -> bio sample -> injections */
 function structure(runs) {
   const types = [], byType = {}, bioIdx = {}, techIdx = {}, techN = {}, bioN = {};
-  runs.filter(r => !isBlank(r)).forEach(r => {
-    if (!byType[r.type]) { byType[r.type] = []; types.push(r.type); }
-    byType[r.type].push(r);
-  });
+  runs.filter(r => !isBlank(r)).forEach(r => { if (!byType[r.type]) { byType[r.type] = []; types.push(r.type); } byType[r.type].push(r); });
   types.forEach(ty => {
     const bios = [...new Set(byType[ty].map(r => r.bio))]; bioN[ty] = bios.length;
-    byType[ty].forEach(r => {
-      bioIdx[r.name] = bios.indexOf(r.bio);
-      const same = byType[ty].filter(x => x.bio === r.bio);
-      techIdx[r.name] = same.indexOf(r); techN[r.name] = same.length;
-    });
+    byType[ty].forEach(r => { bioIdx[r.name] = bios.indexOf(r.bio);
+      const same = byType[ty].filter(x => x.bio === r.bio); techIdx[r.name] = same.indexOf(r); techN[r.name] = same.length; });
   });
   return { types, byType, bioIdx, techIdx, techN, bioN };
 }
@@ -419,37 +574,53 @@ function repLabel(r, st) {
   return nt > 1 ? `technical ${st.techIdx[r.name] + 1}/${nt}` + (nb > 1 ? ` · bio ${st.bioIdx[r.name] + 1}/${nb}` : "")
                 : nb > 1 ? `biological ${st.bioIdx[r.name] + 1}/${nb}` : "single";
 }
-function swatch(color, dash, w = 22) {
-  return `<svg width="${w}" height="10" aria-hidden="true"><line x1="1" y1="5" x2="${w - 1}" y2="5" stroke="${color}" stroke-width="2.4" stroke-linecap="round" stroke-dasharray="${SVG_DASH[dash] || ""}"/></svg>`;
-}
+const swatch = (color, dash, w = 22) => `<svg width="${w}" height="10" aria-hidden="true"><line x1="1" y1="5" x2="${w - 1}" y2="5" stroke="${color}" stroke-width="2.4" stroke-linecap="round" stroke-dasharray="${SVG_DASH[dash] || ""}"/></svg>`;
 
-/* blank resolution */
+/* blanks */
 function blanksFor(run) {
   if (S.blank === "off" || isBlank(run) || run.blankUse === "none") return [];
+  if (run.blankUse && run.blankUse !== "auto") { const b = RUNS.find(r => r.name === run.blankUse && r.include); return b ? [b] : []; }
   const pool = used().filter(r => isBlank(r) && r.method === run.method);
-  if (run.blankUse && run.blankUse !== "auto") {
-    const b = RUNS.find(r => r.name === run.blankUse && r.include);
-    return b ? [b] : [];
-  }
   if (!pool.length) return [];
   if (S.blank === "mean") return pool;
   const before = pool.filter(b => (b.acquired || "") < (run.acquired || ""));
   return [before.length ? before[before.length - 1] : pool[0]];
 }
-function blankTrace(run, metal) {
-  const bl = blanksFor(run); if (!bl.length) return { y: null, used: [] };
-  const arrs = bl.map(b => interp(run.t, b.t, b.metals[metal] || b.t.map(() => 0)));
-  return { y: run.t.map((_, i) => arrs.reduce((s, a) => s + a[i], 0) / arrs.length), used: bl.map(b => b.name) };
+function blankTrace(run, key) {
+  const sig = run.signals[key]; const bl = blanksFor(run).filter(b => b.signals[key]);
+  if (!bl.length) return { y: null, used: [] };
+  const arrs = bl.map(b => interp(sig.t, b.signals[key].t, b.signals[key].y));
+  return { y: sig.t.map((_, i) => arrs.reduce((s, a) => s + a[i], 0) / arrs.length), used: bl.map(b => b.name) };
 }
 
-/* ================= controls ================= */
+/* panels: auto = one per selected signal; custom = user-defined stacks with per-item scaling */
+function activePanels() {
+  if (S.layout === "custom" && S.panels.some(p => p.items.length)) return S.panels.filter(p => p.items.length);
+  return SIGNALS.filter(s => S.sigOn.has(s.key)).map(s => ({ id: "auto-" + s.key, items: [{ key: s.key, mode: "raw", factor: 1, shift: 0 }] }));
+}
+function scaleY(y, it) {
+  let out = y;
+  if (it.mode === "pct") { let m = -Infinity; for (const v of y) if (v > m) m = v; const k = m > 0 ? 100 / m : 1; out = y.map(v => v * k); }
+  else if (it.mode === "factor") { const f = +it.factor || 1; out = y.map(v => v * f); }
+  const sh = +it.shift || 0; return sh ? out.map(v => v + sh) : out;
+}
+function panelTitle(p) {
+  const units = [...new Set(p.items.map(it => it.mode === "pct" ? "% of max" : sigInfo(it.key).unit + (it.mode === "factor" && +it.factor !== 1 ? ` ×${it.factor}` : "")))];
+  const names = p.items.map(it => sigInfo(it.key).name).join(" + ");
+  return `${names}${units.length === 1 ? ` (${units[0]})` : " (scaled)"}`;
+}
+const panelUnit = p => { const u = [...new Set(p.items.map(it => it.mode === "pct" ? "%" : sigInfo(it.key).unit))]; return u.length === 1 ? u[0] : ""; };
+
+/* =====================================================================
+   CONTROLS
+   ===================================================================== */
 function seg(id, opts, key, after) {
   const el = document.getElementById(id); el.innerHTML = "";
   opts.forEach(([val, label]) => {
     const b = document.createElement("button"); b.type = "button"; b.textContent = label;
-    b.setAttribute("aria-pressed", key === "metals" ? S.metals.has(val) : S[key] === val);
+    b.setAttribute("aria-pressed", key === "sigOn" ? S.sigOn.has(val) : S[key] === val);
     b.onclick = () => {
-      if (key === "metals") { S.metals.has(val) ? (S.metals.size > 1 && S.metals.delete(val)) : S.metals.add(val); }
+      if (key === "sigOn") { S.sigOn.has(val) ? (S.sigOn.size > 1 && S.sigOn.delete(val)) : S.sigOn.add(val); }
       else S[key] = val;
       savePrefs(); (after || buildControls)(); render();
     };
@@ -457,128 +628,274 @@ function seg(id, opts, key, after) {
   });
 }
 function buildControls() {
-  seg("methodSeg", METHODS.map(m => [m, `${m} s method · ${used().filter(r => r.method === m).length} runs`]), "method", () => { xRange = null; buildControls(); });
-  seg("metalSeg", METALS.map(m => [m, m]), "metals");
+  seg("methodSeg", [...METHODS.map(m => [m, `${m} s · ${used().filter(r => r.method === m).length}`]), ...(METHODS.length > 1 ? [["all", `All · ${used().length}`]] : [])],
+    "method", () => { xRange = null; buildControls(); });
+  const custom = S.layout === "custom" && S.panels.some(p => p.items.length);
+  document.getElementById("sigCtl").querySelector(".lbl").textContent = custom ? "Signals (custom panels on)" : "Signals";
+  seg("sigSeg", SIGNALS.map(s => [s.key, SIGNALS.filter(x => x.name === s.name).length > 1 || DETS.length > 1 ? `${s.name}` : s.name]), "sigOn");
+  document.querySelectorAll("#sigSeg button").forEach((b, i) => { b.disabled = custom; b.title = SIGNALS[i] ? `${SIGNALS[i].det} · ${SIGNALS[i].name} (${SIGNALS[i].unit})` : ""; });
   seg("blankSeg", [["off", "Off"], ["mean", "Mean of blanks"], ["nearest", "Nearest prior"]], "blank", () => { buildControls(); buildManager(); });
   seg("unitSeg", [["s", "Seconds"], ["min", "Minutes"]], "unit");
   seg("ySeg", [["linear", "Linear"], ["log", "Log"]], "y");
-  seg("zoomSeg", [["x", "Time (X)"], ["y", "Intensity (Y)"], ["xy", "Both"]], "zoom");
-  seg("peakMarkSeg", [[true, "Show"], [false, "Hide"]], "peakMarks");
   seg("viewSeg", [["runs", "Each run"], ["type", "Mean by type"], ["order", "Run order"]], "view", () => { xRange = null; buildControls(); });
   seg("showBlankSeg", [[false, "Hide"], [true, "Show raw"]], "showBlanks");
+  seg("zoomSeg", [["x", "Time (X)"], ["y", "Intensity (Y)"], ["xy", "Both"]], "zoom");
+  seg("peakMarkSeg", [[true, "Show"], [false, "Hide"]], "peakMarks");
   const order = S.view === "order";
   ["methodSeg", "blankSeg", "showBlankSeg"].forEach(id => document.querySelectorAll(`#${id} button`).forEach(b => b.disabled = order));
   document.getElementById("carryCard").hidden = !order;
   buildChips();
 }
 function buildChips() {
-  const st = colorMap();
-  const box = document.getElementById("samples"); box.innerHTML = "";
+  const st = colorMap(); const box = document.getElementById("samples"); box.innerHTML = "";
   if (!RUNS.length) { box.innerHTML = `<div class="empty">No runs loaded yet.</div>`; return; }
   st.types.forEach(ty => {
     const g = document.createElement("div"); g.className = "tgroup";
     const tn = document.createElement("button"); tn.className = "tname"; tn.type = "button";
-    const members = st.byType[ty];
-    tn.textContent = `${ty}`; tn.title = `${st.bioN[ty]} biological sample(s), ${members.length} injection(s). Tap to show/hide all.`;
-    tn.onclick = () => { const anyOn = members.some(r => !S.hidden.has(r.name));
-      members.forEach(r => anyOn ? S.hidden.add(r.name) : S.hidden.delete(r.name)); buildChips(); render(); };
+    const members = st.byType[ty]; tn.textContent = ty;
+    tn.title = `${st.bioN[ty]} biological sample(s), ${members.length} injection(s). Tap to show/hide all.`;
+    tn.onclick = () => { const anyOn = members.some(r => !S.hidden.has(r.name)); members.forEach(r => anyOn ? S.hidden.add(r.name) : S.hidden.delete(r.name)); buildChips(); render(); };
     g.appendChild(tn);
     members.forEach(r => g.appendChild(chip(r, st.color[ty], st.dash[r.name], repLabel(r, st))));
     box.appendChild(g);
   });
   const blanks = scopeRuns().filter(isBlank);
   if (blanks.length) {
-    const g = document.createElement("div"); g.className = "tgroup";
-    g.innerHTML = `<span class="tname" style="cursor:default">Blanks</span>`;
-    blanks.forEach(b => g.appendChild(chip(b, css("--blank"), "dash", `blank · ${hhmm(b)}`, true)));
-    box.appendChild(g);
+    const g = document.createElement("div"); g.className = "tgroup"; g.innerHTML = `<span class="tname" style="cursor:default">Blanks</span>`;
+    blanks.forEach(b => g.appendChild(chip(b, css("--blank"), "dash", `blank · ${hhmm(b)}`, true))); box.appendChild(g);
   }
 }
 function chip(r, color, dash, tip, noToggle) {
   const c = document.createElement("span");
   c.className = "chip" + (S.hidden.has(r.name) && !noToggle ? " off" : "") + (S.selected === r.name ? " sel" : "");
   const v = document.createElement("button"); v.type = "button"; v.className = "vis"; v.innerHTML = swatch(color, dash);
-  v.setAttribute("aria-label", `${noToggle ? "Blank" : S.hidden.has(r.name) ? "Show" : "Hide"} ${r.name}`);
-  v.setAttribute("aria-pressed", !S.hidden.has(r.name));
+  v.setAttribute("aria-label", `${noToggle ? "Blank" : S.hidden.has(r.name) ? "Show" : "Hide"} ${r.name}`); v.setAttribute("aria-pressed", !S.hidden.has(r.name));
   if (noToggle) { v.disabled = true; v.style.cursor = "default"; }
   else v.onclick = () => { S.hidden.has(r.name) ? S.hidden.delete(r.name) : S.hidden.add(r.name); buildChips(); render(); };
   const n = document.createElement("button"); n.type = "button"; n.className = "nm"; n.textContent = r.name;
-  n.title = `${tip} · tap for file info`; n.onclick = () => openInfo(r.name);
+  n.title = `${tip} · ${Object.values(r.signals).map(s => s.name).join(", ")} · tap for file info`; n.onclick = () => openInfo(r.name);
   c.append(v, n); return c;
 }
 document.getElementById("allOn").onclick = () => { S.hidden.clear(); buildChips(); render(); };
 document.getElementById("allOff").onclick = () => { scopeRuns().forEach(r => S.hidden.add(r.name)); buildChips(); render(); };
 
-/* ================= file & sample manager ================= */
+/* =====================================================================
+   FILES & SAMPLES MANAGER
+   ===================================================================== */
 const mgr = document.getElementById("mgr"), mgrBtn = document.getElementById("mgrBtn");
 mgrBtn.onclick = () => { mgr.hidden = !mgr.hidden; mgrBtn.setAttribute("aria-expanded", !mgr.hidden); if (!mgr.hidden) buildManager(); };
 function blankOptions(run) {
-  const pool = RUNS.filter(r => isBlank(r) && r.method === run.method && r.name !== run.name);
+  const pool = RUNS.filter(r => isBlank(r) && r.name !== run.name && (r.method === run.method));
   const auto = S.blank === "off" ? "Auto (subtraction off)" : S.blank === "mean" ? "Auto: mean of blanks" : "Auto: nearest prior";
-  return [["auto", auto], ["none", "None"], ...pool.map(b => [b.name, `${b.name} (${hhmm(b)})${b.include ? "" : " – excluded"}`])];
+  return [["auto", auto], ["none", "None"], ...pool.map(b => [b.name, `${b.name}${hhmm(b) ? ` (${hhmm(b)})` : ""}${b.include ? "" : " – excluded"}`])];
 }
 function buildManager() {
   if (mgr.hidden) return;
-  const st = structure(used());
-  const tbl = document.getElementById("mgrTbl");
-  if (!RUNS.length) { tbl.innerHTML = `<tr><td class="empty">No files yet. Use “Add files…” and select the CSV exports from one batch.</td></tr>`; return; }
-  tbl.innerHTML = `<tr><th>Use</th><th>#</th><th>Time</th><th>Run</th><th>Method</th><th>Role</th><th>Type</th><th>Biological sample</th><th>Replicate</th><th>Blank subtracted</th><th></th></tr>` +
+  const st = structure(used()); const tbl = document.getElementById("mgrTbl");
+  if (!RUNS.length) { tbl.innerHTML = `<tr><td class="empty">No files yet. Use “Add files…” and select the exports from one batch.</td></tr>`; drawFormats(); return; }
+  const runNames = RUNS.map(r => r.name);
+  tbl.innerHTML = `<tr><th>Use</th><th>#</th><th>Time</th><th>Run</th><th>Method</th><th>Role</th><th>Type</th><th>Biological sample</th><th>Replicate</th><th>Blank subtracted</th></tr>` +
     RUNS.map((r, i) => {
       const resolved = r.include && !isBlank(r) ? blanksFor(r).map(b => b.name).join(" + ") || "none" : "";
+      const rl = repLabel(r, st);
+      const fileRows = r.files.map(f => `<tr class="sub ${r.include ? "" : "excluded"}" data-f="${esc(f.fname)}"><td></td><td></td><td></td>
+        <td colspan="7"><span class="note">↳ ${esc(f.fname)} · ${esc(f.kind)} · ${f.signals.map(s => esc(s.name)).join(", ")}</span>
+          <label class="note" style="margin-left:10px">run: <input class="in" data-run list="runNames" value="${esc(f.run)}" aria-label="Run for ${esc(f.fname)}" style="width:170px"></label>
+          <button class="x" data-rmf aria-label="Remove ${esc(f.fname)}" title="Remove this file">×</button></td></tr>`).join("");
       return `<tr class="${r.include ? "" : "excluded"}" data-n="${esc(r.name)}">
-      <td><input type="checkbox" data-f="include" ${r.include ? "checked" : ""} aria-label="Use ${esc(r.name)}"></td>
-      <td class="num">${i + 1}</td><td class="num">${hhmm(r)}</td>
-      <td><button class="link" data-info="1">${esc(r.name)}</button></td>
+      <td><input type="checkbox" data-k="include" ${r.include ? "checked" : ""} aria-label="Use ${esc(r.name)}"></td>
+      <td class="num">${i + 1}</td><td class="num">${hhmm(r) || "–"}</td>
+      <td><button class="link" data-info>${esc(r.name)}</button></td>
       <td class="num">${r.method} s</td>
-      <td><select class="in" data-f="role" aria-label="Role"><option value="sample" ${r.role === "sample" ? "selected" : ""}>Sample</option><option value="blank" ${isBlank(r) ? "selected" : ""}>Blank</option></select></td>
-      <td>${isBlank(r) ? `<span class="pill blank">blank</span>` : `<input class="in w" data-f="type" value="${esc(r.type)}" aria-label="Type">`}</td>
-      <td>${isBlank(r) ? "" : `<input class="in w" data-f="bio" value="${esc(r.bio)}" aria-label="Biological sample">`}</td>
-      <td>${isBlank(r) || !r.include ? "" : `<span class="pill ${/bio|single/.test(repLabel(r, st)) && !/technical/.test(repLabel(r, st)) ? "bio" : ""}">${repLabel(r, st)}</span>`}</td>
-      <td>${isBlank(r) ? "" : `<select class="in" data-f="blankUse" aria-label="Blank subtracted">${blankOptions(r).map(([v, l]) => `<option value="${esc(v)}" ${r.blankUse === v ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>
-        <div class="note">${resolved && r.blankUse === "auto" ? "→ " + esc(resolved) : ""}</div>`}</td>
-      <td><button class="x" data-rm="1" aria-label="Remove ${esc(r.name)}">×</button></td></tr>`;
-    }).join("");
+      <td><select class="in" data-k="role" aria-label="Role"><option value="sample" ${r.role === "sample" ? "selected" : ""}>Sample</option><option value="blank" ${isBlank(r) ? "selected" : ""}>Blank</option></select></td>
+      <td>${isBlank(r) ? `<span class="pill blank">blank</span>` : `<input class="in w" data-k="type" value="${esc(r.type)}" aria-label="Type">`}</td>
+      <td>${isBlank(r) ? "" : `<input class="in w" data-k="bio" value="${esc(r.bio)}" aria-label="Biological sample">`}</td>
+      <td>${isBlank(r) || !r.include ? "" : `<span class="pill ${/technical/.test(rl) ? "" : "bio"}">${rl}</span>`}</td>
+      <td>${isBlank(r) ? "" : `<select class="in" data-k="blankUse" aria-label="Blank subtracted">${blankOptions(r).map(([v, l]) => `<option value="${esc(v)}" ${r.blankUse === v ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>
+        <div class="note">${resolved && r.blankUse === "auto" ? "→ " + esc(resolved) : ""}</div>`}</td></tr>${fileRows}`;
+    }).join("") + `<datalist id="runNames">${runNames.map(n => `<option value="${esc(n)}">`).join("")}</datalist>`;
   tbl.querySelectorAll("tr[data-n]").forEach(tr => {
-    const run = RUNS.find(r => r.name === tr.dataset.n);
-    tr.querySelectorAll("[data-f]").forEach(el => el.addEventListener("change", () => {
-      const f = el.dataset.f; run[f] = el.type === "checkbox" ? el.checked : el.value.trim() || (f === "type" ? guessType(run.name) : f === "bio" ? guessBio(run.name) : el.value);
-      saveEdit(run); afterEdit();
+    const name = tr.dataset.n;
+    tr.querySelectorAll("[data-k]").forEach(el => el.addEventListener("change", () => {
+      const k = el.dataset.k; let v = el.type === "checkbox" ? el.checked : el.value.trim();
+      if (k === "type" && !v) v = guessType(name); if (k === "bio" && !v) v = guessBio(name);
+      setMeta(name, { [k]: v }); afterEdit();
     }));
-    tr.querySelector("[data-info]").onclick = () => openInfo(run.name);
-    tr.querySelector("[data-rm]").onclick = () => { RUNS = RUNS.filter(r => r !== run); S.marks = S.marks.filter(m => m.label !== run.name);
-      setStatus(`Removed ${run.name}. Use “Add files…” to bring it back.`); finishLoad(); };
+    tr.querySelector("[data-info]").onclick = () => openInfo(name);
   });
+  tbl.querySelectorAll("tr[data-f]").forEach(tr => {
+    const f = FILES.find(x => x.fname === tr.dataset.f);
+    tr.querySelector("[data-run]").addEventListener("change", e => {
+      const v = e.target.value.trim() || f.run; f.run = v; EDITS.files[f.fname] = v; saveEdits();
+      setStatus(`${f.fname} now belongs to run “${v}”.`); afterEdit();
+    });
+    tr.querySelector("[data-rmf]").onclick = () => { FILES = FILES.filter(x => x !== f); setStatus(`Removed ${f.fname}. Use “Add files…” to bring it back.`); finishLoad(); };
+  });
+  drawFormats();
 }
 function afterEdit() { finishLoad(); if (S.selected) openInfo(S.selected, true); }
 document.getElementById("addFiles").addEventListener("change", e => { const f = [...e.target.files]; e.target.value = ""; if (f.length) ingest(f, false); });
-document.getElementById("replaceFiles").addEventListener("change", e => { const f = [...e.target.files]; e.target.value = ""; if (f.length) { LABEL = `${f.length} file(s) from your computer`; EDITS = store.get(editKey(), {}); ingest(f, true); } });
+document.getElementById("replaceFiles").addEventListener("change", e => { const f = [...e.target.files]; e.target.value = ""; if (f.length) { LABEL = `${f.length} file(s) from your computer`; loadEdits(); ingest(f, true); } });
+document.getElementById("customFiles").addEventListener("change", async e => { const f = e.target.files[0]; e.target.value = ""; if (f) openImport({ name: f.name, text: await f.text() }); });
 document.getElementById("resetEdits").onclick = e => {
   const b = e.currentTarget;
   if (b.dataset.armed !== "1") { b.dataset.armed = "1"; b.textContent = "Tap again to reset"; setTimeout(() => { b.dataset.armed = ""; b.textContent = "Reset edits"; }, 3000); return; }
   b.dataset.armed = ""; b.textContent = "Reset edits";
-  EDITS = {}; store.del(editKey()); RUNS.forEach(defaults); setStatus("Edits reset to the names' defaults."); afterEdit();
+  EDITS = { runs: {}, files: {} }; store.del(editKey()); S.layout = "auto"; S.panels = []; S.offsets = {};
+  FILES.forEach(f => f.run = f.origRun || f.run); setStatus("Edits reset to defaults (run pairing, roles, types, panels, offsets)."); afterEdit();
 };
 document.getElementById("copySheet").onclick = e => {
-  const rows = [["sample", "type", "blank", "include", "bio_sample", "blank_used", "method"],
-    ...RUNS.map(r => [r.name, isBlank(r) ? "Blank" : r.type, isBlank(r) ? "yes" : "no", r.include ? "yes" : "no", isBlank(r) ? "" : r.bio, isBlank(r) ? "" : r.blankUse, `${r.method}s run`])];
+  const rows = [["sample", "type", "blank", "include", "bio_sample", "blank_used", "method", "files"],
+    ...RUNS.map(r => [r.name, isBlank(r) ? "Blank" : r.type, isBlank(r) ? "yes" : "no", r.include ? "yes" : "no", isBlank(r) ? "" : r.bio, isBlank(r) ? "" : r.blankUse, `${r.method}s run`, r.files.map(f => f.fname).join("; ")])];
   copyText(rows.map(r => r.join("\t")).join("\n"), e.currentTarget);
   setStatus("Copied. Paste into Excel and save as sample_sheet.csv next to your data; the Python script and this viewer both read it.");
 };
+function drawPending() {
+  const box = document.getElementById("pendingBox");
+  box.innerHTML = PENDING.length ? `<div class="row" style="margin-top:8px;justify-content:flex-start"><span class="pill warn">needs a format</span>
+    ${PENDING.map((p, i) => `<button class="btn" data-pend="${i}">Set up ${esc(p.name)}…</button>`).join("")}</div>` : "";
+  box.querySelectorAll("[data-pend]").forEach(b => b.onclick = () => openImport(PENDING[+b.dataset.pend]));
+}
+function drawFormats() {
+  const box = document.getElementById("fmtBox");
+  box.innerHTML = FORMATS.length ? `<h3>Saved formats</h3><div class="btns">${FORMATS.map((f, i) => `<span class="pill">${esc(f.name)} · ${esc(f.det)} · matches “${esc(f.match)}” <button class="x" data-delfmt="${i}" aria-label="Delete format ${esc(f.name)}">×</button></span>`).join("")}</div>
+    <p class="note">Saved formats live in this browser and are applied automatically to new files whose first lines contain the match text.</p>` : "";
+  box.querySelectorAll("[data-delfmt]").forEach(b => b.onclick = () => { FORMATS.splice(+b.dataset.delfmt, 1); saveFormats(); drawFormats(); });
+}
 
-/* ================= sample info sheet ================= */
+/* =====================================================================
+   IMPORT EDITOR (raw data → format)
+   ===================================================================== */
+const imp = document.getElementById("impDlg"), impScrim = document.getElementById("impScrim");
+let IMP = null;
+function openImport(file) {
+  const lines = linesOf(file.text); const d = guessDelim(lines);
+  let hdr = 0; for (let i = 0; i < Math.min(60, lines.length); i++) { const p = splitDelim(lines[i], d); if (p.length > 1 && p.filter(isNum).length >= 2) { hdr = i; break; } }
+  const cols = splitDelim(lines[Math.max(0, hdr - 1)] || "", d).length;
+  IMP = { file, f: { name: file.name.replace(/\.(csv|txt|tsv)$/i, "") + " format", match: (lines[0] || "").slice(0, 24), delim: "auto", headerRow: hdr, dataRow: hdr + 1,
+    timeCol: 0, timeUnit: "s", det: "Detector", unit: "", runFrom: "file", runLine: 1,
+    signals: Array.from({ length: Math.max(cols, splitDelim(lines[hdr] || "", d).length) }, (_, i) => ({ col: i, use: i > 0, name: "" })) } };
+  drawImport(); imp.hidden = impScrim.hidden = false; imp.querySelector("#impClose").focus();
+}
+function closeImport() { imp.hidden = impScrim.hidden = true; IMP = null; }
+impScrim.onclick = closeImport;
+function drawImport() {
+  const { file, f } = IMP; const lines = linesOf(file.text); const d = f.delim === "auto" ? guessDelim(lines) : f.delim;
+  const names = f.headerRow > 0 ? splitDelim(lines[f.headerRow - 1] || "", d).map(s => s.trim()) : [];
+  const ncol = Math.max(names.length, splitDelim(lines[(f.dataRow || 1) - 1] || "", d).length);
+  while (f.signals.length < ncol) f.signals.push({ col: f.signals.length, use: true, name: "" });
+  f.signals.length = ncol;
+  const res = parseWithFormat(file.text, file.name, f);
+  const preview = lines.slice(0, 40).map((l, i) => `${String(i + 1).padStart(3)}${i + 1 === f.headerRow ? " H" : i + 1 === f.dataRow ? " ▶" : "  "} ${esc(l.length > 160 ? l.slice(0, 160) + "…" : l)}`).join("\n");
+  const opt = (v, cur, l) => `<option value="${v}" ${String(cur) === String(v) ? "selected" : ""}>${l}</option>`;
+  imp.innerHTML = `
+    <div class="row" style="flex-wrap:nowrap"><h2 id="impTitle" style="margin:0">Import editor · ${esc(file.name)}</h2><button class="btn" id="impClose">Close</button></div>
+    <p class="hint" style="margin:6px 0 0">Tell the viewer how this file is laid out. The preview on the right updates as you go; save it as a format and future files that start the same way load automatically.</p>
+    <div class="imp-grid">
+      <div style="min-width:0"><div class="lbl" style="margin-bottom:4px">Raw file, first 40 lines (H = header row, ▶ = first data row)</div><pre class="raw lines">${preview}</pre></div>
+      <div class="form" style="align-content:start">
+        <label for="i_delim">Separator</label><select class="in" id="i_delim">${opt("auto", f.delim, `Auto (${d === "\t" ? "tab" : d === "ws" ? "spaces" : d})`)}${opt(",", f.delim, "Comma")}${opt("\t", f.delim, "Tab")}${opt(";", f.delim, "Semicolon")}${opt("ws", f.delim, "Spaces")}</select>
+        <label for="i_hdr">Header row (0 = none)</label><input class="in num-in" id="i_hdr" type="number" min="0" value="${f.headerRow}">
+        <label for="i_data">First data row</label><input class="in num-in" id="i_data" type="number" min="1" value="${f.dataRow}">
+        <label for="i_tcol">Time column</label><select class="in" id="i_tcol">${f.signals.map((s, i) => opt(i, f.timeCol, `${i + 1}: ${esc(names[i] || "column " + (i + 1))}`)).join("")}</select>
+        <label for="i_tunit">Time is in</label><select class="in" id="i_tunit">${opt("s", f.timeUnit, "seconds")}${opt("min", f.timeUnit, "minutes")}${opt("ms", f.timeUnit, "milliseconds")}</select>
+        <label>Signal columns</label><div style="display:grid;gap:4px">${f.signals.map((s, i) => i === +f.timeCol ? "" : `<span><input type="checkbox" data-use="${i}" ${s.use ? "checked" : ""} aria-label="Use column ${i + 1}"> ${i + 1}: ${esc(names[i] || "column " + (i + 1))} → <input class="in" data-nm="${i}" placeholder="${esc(names[i] || "name")}" value="${esc(s.name)}" style="width:120px" aria-label="Name for column ${i + 1}"></span>`).join("")}</div>
+        <label for="i_det">Detector label</label><input class="in" id="i_det" value="${esc(f.det)}" placeholder="e.g. DAD, FLD, RI">
+        <label for="i_unit">Unit</label><input class="in" id="i_unit" value="${esc(f.unit)}" placeholder="e.g. mAU, LU">
+        <label for="i_run">Run name from</label><span><select class="in" id="i_run">${opt("file", f.runFrom, "file name")}${opt("line", f.runFrom, "text on line…")}</select> <input class="in num-in" id="i_runline" type="number" min="1" value="${f.runLine}" ${f.runFrom === "line" ? "" : "hidden"} aria-label="Line number"></span>
+        <label for="i_name">Format name</label><input class="in ww" id="i_name" value="${esc(f.name)}">
+        <label for="i_match">Recognise files whose first lines contain</label><input class="in ww" id="i_match" value="${esc(f.match)}">
+        <label>Result</label><div class="note" id="i_res">${res ? `${res.signals.length} signal(s): ${res.signals.map(s => esc(s.name)).join(", ")} · ${res.signals[0].t.length} points · ${fmtBoth(res.signals[0].t[0])} to ${fmtBoth(res.signals[0].t[res.signals[0].t.length - 1])} · run “${esc(res.run)}”` : `<span class="pill warn">nothing readable yet</span> check the rows and columns`}</div>
+        <span></span><div class="btns"><button class="btn primary" id="i_load" ${res ? "" : "disabled"}>Load this file</button><button class="btn" id="i_save" ${res ? "" : "disabled"}>Save format &amp; load</button></div>
+      </div>
+    </div>`;
+  const set = (id, k, num) => imp.querySelector(id).addEventListener("change", e => { f[k] = num ? +e.target.value : e.target.value; drawImport(); });
+  set("#i_delim", "delim"); set("#i_hdr", "headerRow", 1); set("#i_data", "dataRow", 1); set("#i_tcol", "timeCol", 1); set("#i_tunit", "timeUnit");
+  set("#i_det", "det"); set("#i_unit", "unit"); set("#i_run", "runFrom"); set("#i_runline", "runLine", 1); set("#i_name", "name"); set("#i_match", "match");
+  imp.querySelectorAll("[data-use]").forEach(el => el.onchange = () => { f.signals[+el.dataset.use].use = el.checked; drawImport(); });
+  imp.querySelectorAll("[data-nm]").forEach(el => el.onchange = () => { f.signals[+el.dataset.nm].name = el.value.trim(); drawImport(); });
+  imp.querySelector("#impClose").onclick = closeImport;
+  const load = save => {
+    const rec = parseWithFormat(file.text, file.name, f); if (!rec) return;
+    if (save) { const i = FORMATS.findIndex(x => x.name === f.name); const copy = JSON.parse(JSON.stringify(f)); i >= 0 ? FORMATS[i] = copy : FORMATS.push(copy); saveFormats(); }
+    rec.text = file.text.length < 400000 ? file.text : null; rec.origRun = rec.run;
+    if (EDITS.files[rec.fname]) rec.run = EDITS.files[rec.fname];
+    const i = FILES.findIndex(x => x.fname === rec.fname); i >= 0 ? FILES[i] = rec : FILES.push(rec);
+    PENDING = PENDING.filter(p => p.name !== file.name);
+    const others = save ? PENDING.filter(p => f.match && linesOf(p.text).slice(0, 8).join("\n").includes(f.match)) : [];
+    closeImport(); drawPending();
+    if (others.length) ingest(others, false).then(() => { PENDING = PENDING.filter(p => !others.includes(p)); drawPending(); });
+    else finishLoad();
+    setStatus(`Loaded ${file.name} with ${save ? "saved " : ""}format “${f.name}”${others.length ? ` and ${others.length} more file(s) that match it` : ""}.`);
+  };
+  imp.querySelector("#i_load").onclick = () => load(false);
+  imp.querySelector("#i_save").onclick = () => load(true);
+}
+
+/* =====================================================================
+   PANELS & OFFSETS EDITOR
+   ===================================================================== */
+const pnlCard = document.getElementById("pnlCard"), pnlBtn = document.getElementById("pnlBtn");
+pnlBtn.onclick = () => { pnlCard.hidden = !pnlCard.hidden; pnlBtn.setAttribute("aria-expanded", !pnlCard.hidden); if (!pnlCard.hidden) buildPanels(); };
+const uid = () => Math.random().toString(36).slice(2, 8);
+function persistLayout() { EDITS.layout = { mode: S.layout, panels: S.panels }; EDITS.offsets = S.offsets; saveEdits(); }
+function ensureCustom() {
+  if (S.layout === "custom" && S.panels.length) return;
+  S.layout = "custom";
+  S.panels = SIGNALS.filter(s => S.sigOn.has(s.key)).map(s => ({ id: uid(), items: [{ key: s.key, mode: "raw", factor: 1, shift: 0 }] }));
+}
+function buildPanels() {
+  if (pnlCard.hidden) return;
+  const box = document.getElementById("panels");
+  const panels = S.layout === "custom" ? S.panels : activePanels();
+  box.innerHTML = (S.layout === "custom" ? "" : `<p class="note" style="margin:0">Showing one panel per selected signal. Change anything below to switch to custom panels.</p>`) +
+    panels.map((p, pi) => `<div class="pnl" data-p="${pi}">
+      <div class="pnl-head"><b>Panel ${pi + 1}</b> <span class="note">${esc(panelTitle(p))}</span>
+        <span class="btns"><button class="btn" data-up ${pi ? "" : "disabled"} aria-label="Move panel up">↑</button><button class="btn" data-down ${pi < panels.length - 1 ? "" : "disabled"} aria-label="Move panel down">↓</button><button class="btn" data-delp>Remove panel</button></span></div>
+      ${p.items.map((it, ii) => { const s = sigInfo(it.key); return `<div class="item" data-i="${ii}">
+        <span class="sig">${p.items.length > 1 ? swatch(css(SLOTS[ii % 8]), "solid", 16) : ""}${esc(s.name)} <span class="note">${esc(s.det)}</span></span>
+        <label class="note">scale <select class="in" data-mode><option value="raw" ${it.mode === "raw" ? "selected" : ""}>Raw (${esc(s.unit) || "as is"})</option><option value="pct" ${it.mode === "pct" ? "selected" : ""}>% of max</option><option value="factor" ${it.mode === "factor" ? "selected" : ""}>× factor</option></select></label>
+        ${it.mode === "factor" ? `<label class="note">× <input class="in num-in" type="number" step="any" data-factor value="${esc(it.factor)}" aria-label="Factor"></label>` : ""}
+        <label class="note">shift <input class="in num-in" type="number" step="any" data-shift value="${esc(it.shift)}" aria-label="Vertical shift"></label>
+        <button class="x" data-deli aria-label="Remove ${esc(s.name)} from panel">×</button></div>`; }).join("")}
+      <span><select class="in" data-add aria-label="Add a signal to panel ${pi + 1}"><option value="">+ add signal…</option>${SIGNALS.map(s => `<option value="${esc(s.key)}">${esc(s.det)} · ${esc(s.name)}</option>`).join("")}</select></span>
+    </div>`).join("");
+  const edit = fn => { ensureCustom(); fn(); persistLayout(); buildControls(); buildPanels(); render(); };
+  box.querySelectorAll(".pnl").forEach(el => {
+    const pi = +el.dataset.p;
+    el.querySelector("[data-delp]").onclick = () => edit(() => S.panels.splice(pi, 1));
+    el.querySelector("[data-up]").onclick = () => edit(() => S.panels.splice(pi - 1, 0, S.panels.splice(pi, 1)[0]));
+    el.querySelector("[data-down]").onclick = () => edit(() => S.panels.splice(pi + 1, 0, S.panels.splice(pi, 1)[0]));
+    el.querySelector("[data-add]").onchange = e => { const k = e.target.value; if (k) edit(() => S.panels[pi].items.push({ key: k, mode: "raw", factor: 1, shift: 0 })); };
+    el.querySelectorAll(".item").forEach(itEl => {
+      const ii = +itEl.dataset.i, it = () => S.panels[pi].items[ii];
+      itEl.querySelector("[data-mode]").onchange = e => edit(() => it().mode = e.target.value);
+      const fEl = itEl.querySelector("[data-factor]"); if (fEl) fEl.onchange = e => edit(() => it().factor = +e.target.value || 1);
+      itEl.querySelector("[data-shift]").onchange = e => edit(() => it().shift = +e.target.value || 0);
+      itEl.querySelector("[data-deli]").onclick = () => edit(() => S.panels[pi].items.splice(ii, 1));
+    });
+  });
+  const offBox = document.getElementById("offsets");
+  offBox.innerHTML = DETS.length ? DETS.map(d => `<label class="note">${esc(d)} <input class="in num-in" type="number" step="0.1" data-off="${esc(d)}" value="${+S.offsets[d] || 0}" aria-label="${esc(d)} time offset in seconds"> s</label>`).join("") : `<span class="note">Load data first.</span>`;
+  offBox.querySelectorAll("[data-off]").forEach(el => el.onchange = () => { S.offsets[el.dataset.off] = +el.value || 0; persistLayout(); finishLoad(); });
+}
+document.getElementById("addPanel").onclick = () => { ensureCustom(); S.panels.push({ id: uid(), items: [] }); persistLayout(); buildPanels(); };
+document.getElementById("autoPanels").onclick = () => { S.layout = "auto"; S.panels = []; persistLayout(); buildControls(); buildPanels(); render(); };
+
+/* =====================================================================
+   SAMPLE INFO SHEET
+   ===================================================================== */
 const sheet = document.getElementById("sheet"), scrim = document.getElementById("scrim");
 function closeInfo() { sheet.hidden = scrim.hidden = true; const was = S.selected; S.selected = null; buildChips();
-  const back = [...document.querySelectorAll(".chip .nm, #mgrTbl .link")].find(b => b.textContent === was); back?.focus(); }
+  [...document.querySelectorAll(".chip .nm, #mgrTbl .link")].find(b => b.textContent === was)?.focus(); }
 scrim.onclick = closeInfo;
-document.addEventListener("keydown", e => { if (e.key === "Escape" && !sheet.hidden) closeInfo(); });
 function openInfo(name, keepFocus) {
   const r = RUNS.find(x => x.name === name); if (!r) return closeInfo();
-  S.selected = name; const st = structure(used());
-  const log = BATCHLOG[r.name];
-  const peaks = Object.keys(r.metals).map(m => {
-    const y = r.metals[m]; let bi = 0; y.forEach((v, i) => { if (v > y[bi]) bi = i; });
-    const bgv = y.filter((_, i) => r.t[i] <= 60).sort((a, b) => a - b);
-    return `<tr><td>${m}</td><td class="num">${fmtC(y[bi])}</td><td class="num">${r.t[bi].toFixed(2)}</td><td class="num">${(r.t[bi] / 60).toFixed(3)}</td><td class="num">${fmtC(bgv[bgv.length >> 1] ?? 0)}</td></tr>`;
+  S.selected = name; const st = structure(used()); const log = BATCHLOG[r.name];
+  const sigRows = Object.values(r.signals).map(s => {
+    const y = s.y; let bi = 0; y.forEach((v, i) => { if (v > y[bi]) bi = i; });
+    const bgv = y.filter((_, i) => s.t[i] <= 60).sort((a, b) => a - b);
+    return `<tr><td>${esc(s.name)} <span class="note">${esc(s.det)}</span></td><td class="num">${fmtV(y[bi])}</td><td class="num">${s.t[bi].toFixed(2)}</td><td class="num">${(s.t[bi] / 60).toFixed(3)}</td><td class="num">${fmtV(bgv[bgv.length >> 1] ?? 0)}</td><td>${esc(s.unit)}</td></tr>`;
   }).join("");
   const logKeys = ["Sample Type", "Sample Name", "Vial#", "Acq. Date-Time", "Acquisition Result", "Comment", "Dilution Result", "Total Dil.", "Level", "Total Acq Time", "Operator"];
   const sib = !isBlank(r) ? used().filter(x => x !== r && !isBlank(x) && x.type === r.type) : [];
@@ -587,18 +904,17 @@ function openInfo(name, keepFocus) {
       <div style="min-width:0"><div class="lbl">${isBlank(r) ? "Blank" : esc(r.type)}${r.include ? "" : " · excluded"}</div><h2 id="sheetTitle" style="font-size:17px;margin:2px 0 0;overflow-wrap:anywhere">${esc(r.name)}</h2></div>
       <button class="btn" id="closeSheet">Close</button>
     </div>
-    <h3>File header</h3>
-    <pre class="raw">${esc(r.header.join("\n"))}${r.footer.length ? "\n…\n" + esc(r.footer.join("\n")) : ""}</pre>
-    <dl class="kv" style="margin-top:10px">
-      <dt>File</dt><dd>${esc(r.file)}</dd>
-      ${r.path ? `<dt>Instrument path</dt><dd class="mono" style="font-family:var(--mono);font-size:11.5px">${esc(r.path)}</dd>` : ""}
-      <dt>Acquired</dt><dd>${esc(r.acquired || "not in file")}</dd>
-      <dt>Queue position</dt><dd>#${RUNS.indexOf(r) + 1} of ${RUNS.length}</dd>
-      <dt>Run length</dt><dd>${r.t[r.t.length - 1].toFixed(1)} s (${(r.t[r.t.length - 1] / 60).toFixed(2)} min), ${r.t.length} points, every ${(r.t[1] - r.t[0]).toFixed(3)} s</dd>
-      <dt>Signals</dt><dd>${Object.keys(r.metals).join(", ")}</dd>
-    </dl>
-    ${log ? `<h3>Batch log entry</h3><dl class="kv">${logKeys.filter(k => log[k] && log[k] !== "-").map(k => `<dt>${esc(k)}</dt><dd>${esc(log[k])}</dd>`).join("")}</dl>`
-          : `<p class="note" style="margin-top:10px">Add <code>BatchLog.csv</code> in Files &amp; samples to see this run's queue comment, vial and result here.</p>`}
+    ${r.files.map(f => `<h3>${esc(f.fname)} <span class="note" style="text-transform:none;letter-spacing:0">${esc(f.kind)}</span></h3>
+      <pre class="raw">${esc(f.header.join("\n"))}${f.footer.length ? "\n…\n" + esc(f.footer.join("\n")) : ""}</pre>
+      <dl class="kv" style="margin-top:8px">
+        ${f.path ? `<dt>Instrument path</dt><dd style="font-family:var(--mono);font-size:11.5px">${esc(f.path)}</dd>` : ""}
+        <dt>Acquired</dt><dd>${esc(f.acquired || "not in file")}</dd>
+        ${f.signals.map(s => `<dt>${esc(s.name)}</dt><dd>${s.t.length} points, ${fmtBoth(s.t[0])} to ${fmtBoth(s.t[s.t.length - 1])}, every ${((s.t[s.t.length - 1] - s.t[0]) / (s.t.length - 1)).toFixed(3)} s${+S.offsets[s.det] ? ` · shown shifted ${S.offsets[s.det]} s` : ""}</dd>`).join("")}
+        ${(f.extra || []).map(x => `<dt>Signal</dt><dd>${esc(x)}</dd>`).join("")}
+      </dl>
+      ${f.text ? `<button class="btn" style="margin-top:8px" data-reimport="${esc(f.fname)}">Open in import editor</button>` : ""}`).join("")}
+    <dl class="kv" style="margin-top:10px"><dt>Queue position</dt><dd>#${RUNS.indexOf(r) + 1} of ${RUNS.length}</dd><dt>Method</dt><dd>${r.method} s</dd></dl>
+    ${log ? `<h3>Batch log entry</h3><dl class="kv">${logKeys.filter(k => log[k] && log[k] !== "-").map(k => `<dt>${esc(k)}</dt><dd>${esc(log[k])}</dd>`).join("")}</dl>` : ""}
     <h3>Settings for this run</h3>
     <div class="form">
       <label for="f_include">Use in analysis</label><span><input type="checkbox" id="f_include" ${r.include ? "checked" : ""}></span>
@@ -607,30 +923,31 @@ function openInfo(name, keepFocus) {
       <label for="f_type">Type</label><input class="in" id="f_type" value="${esc(r.type)}">
       <label for="f_bio">Biological sample</label><span><input class="in" id="f_bio" value="${esc(r.bio)}" list="bioList">
         <datalist id="bioList">${[...new Set(sib.map(x => x.bio))].map(b => `<option value="${esc(b)}">`).join("")}</datalist>
-        <div class="note" style="margin-top:4px">${repLabel(r, st)}. Same value as another run = technical replicate (same material injected again); a different value = biological replicate.</div></span>
+        <div class="note" style="margin-top:4px">${repLabel(r, st)}. Same value as another run = technical replicate; a different value = biological replicate.</div></span>
       <label for="f_blank">Blank subtracted</label><span><select class="in" id="f_blank">${blankOptions(r).map(([v, l]) => `<option value="${esc(v)}" ${r.blankUse === v ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>
         <div class="note" style="margin-top:4px">Currently: ${esc(blanksFor(r).map(b => b.name).join(" + ") || "none")}</div></span>`}
     </div>
     ${sib.length ? `<h3>Other ${esc(r.type)} runs</h3><div class="btns">${sib.map(x => `<button class="btn" data-go="${esc(x.name)}">${esc(x.name)} <span class="note">${x.bio === r.bio ? "tech" : "bio"}</span></button>`).join("")}</div>` : ""}
     <h3>Raw signal summary</h3>
-    <div class="tbl"><table><tr><th>Signal</th><th style="text-align:right">Max CPS</th><th style="text-align:right">at (s)</th><th style="text-align:right">(min)</th><th style="text-align:right">Background*</th></tr>${peaks}</table></div>
-    <p class="note">*Median CPS over the first 60 s. Raw values, before blank subtraction.</p>`;
+    <div class="tbl"><table><tr><th>Signal</th><th style="text-align:right">Max</th><th style="text-align:right">at (s)</th><th style="text-align:right">(min)</th><th style="text-align:right">Background*</th><th>Unit</th></tr>${sigRows}</table></div>
+    <p class="note">*Median over the first 60 s. Raw values, before blank subtraction.</p>`;
   sheet.hidden = scrim.hidden = false; buildChips();
-  const bind = (id, f, get) => { const el = document.getElementById(id); if (el) el.onchange = () => { r[f] = get(el); saveEdit(r); afterEdit(); }; };
+  const bind = (id, k, get) => { const el = document.getElementById(id); if (el) el.onchange = () => { setMeta(r.name, { [k]: get(el) }); afterEdit(); }; };
   bind("f_include", "include", el => el.checked); bind("f_role", "role", el => el.value);
   bind("f_type", "type", el => el.value.trim() || guessType(r.name)); bind("f_bio", "bio", el => el.value.trim() || guessBio(r.name));
   bind("f_blank", "blankUse", el => el.value);
   document.getElementById("closeSheet").onclick = closeInfo;
   sheet.querySelectorAll("[data-go]").forEach(b => b.onclick = () => openInfo(b.dataset.go));
+  sheet.querySelectorAll("[data-reimport]").forEach(b => b.onclick = () => { const f = FILES.find(x => x.fname === b.dataset.reimport); closeInfo(); openImport({ name: f.fname, text: f.text }); });
   if (!keepFocus) document.getElementById("closeSheet").focus();
 }
 
-/* ================= zoom ================= */
-// Scroll/pinch and box-zoom act only on the axes picked in "Zoom & scroll acts on".
-// In Time (X) mode each panel's Y range re-fits to the data inside the visible time window.
+/* =====================================================================
+   ZOOM
+   ===================================================================== */
 const PLOT_CONFIG = { responsive: true, displaylogo: false, scrollZoom: true,
   modeBarButtonsToRemove: ["lasso2d", "select2d", "autoScale2d", "zoomIn2d", "zoomOut2d"] };
-const uirev = () => [S.view, S.method, S.unit, S.y, S.zoom, [...S.metals].join()].join("|");
+const uirev = () => [S.view, S.method, S.unit, S.y, S.zoom, activePanels().map(p => p.items.map(i => i.key + i.mode).join("+")).join("|")].join("|");
 function zoomAxes(layout) {
   layout.uirevision = uirev(); layout.dragmode = "zoom";
   Object.keys(layout).forEach(k => {
@@ -643,9 +960,8 @@ function fitY() {
   if (S.zoom !== "x" || !CURRENT.length) return;
   const gd = document.getElementById("plot"); if (!gd.layout) return;
   const upd = {};
-  if (!xRange) {
-    Object.keys(gd.layout).filter(k => /^yaxis\d*$/.test(k)).forEach(k => upd[k + ".autorange"] = true);
-  } else {
+  if (!xRange) Object.keys(gd.layout).filter(k => /^yaxis\d*$/.test(k)).forEach(k => upd[k + ".autorange"] = true);
+  else {
     const [a, b] = xRange, ext = {};
     CURRENT.forEach(s => {
       const ya = s.ya || "y"; const e = ext[ya] || (ext[ya] = [Infinity, -Infinity]);
@@ -671,87 +987,94 @@ document.getElementById("resetZoom").onclick = () => {
   Plotly.relayout(gd, upd).then(render);
 };
 
-/* ================= main plot ================= */
+/* =====================================================================
+   MAIN PLOT
+   ===================================================================== */
 let CURRENT = [], xRange = null;
-function computeSeries() {
+function computeSeries(panels) {
   const st = colorMap(); const out = [];
-  const metals = METALS.filter(m => S.metals.has(m));
   const vis = methodRuns().filter(r => !isBlank(r) && !S.hidden.has(r.name));
-  metals.forEach(m => {
-    const corr = vis.filter(r => r.metals[m]).map(r => { const b = blankTrace(r, m);
-      return { r, y: b.y ? r.metals[m].map((v, i) => v - b.y[i]) : r.metals[m] }; });
-    if (S.view === "runs") {
-      corr.forEach(({ r, y }) => out.push({ label: r.name, metal: m, color: st.color[r.type], dash: st.dash[r.name], t: r.t, y }));
-    } else {
-      st.types.forEach(ty => {
-        const grp = corr.filter(c => c.r.type === ty); if (!grp.length) return;
-        const t = grp[0].r.t; const on = ys => ys.r.t === t ? ys.y : interp(t, ys.r.t, ys.y);
-        const avg = arrs => t.map((_, i) => arrs.reduce((s, a) => s + a[i], 0) / arrs.length);
-        const sd = (arrs, mu) => t.map((_, i) => Math.sqrt(arrs.reduce((s, a) => s + (a[i] - mu[i]) ** 2, 0) / Math.max(1, arrs.length - 1)));
-        const bios = [...new Set(grp.map(c => c.r.bio))];
-        const bioMeans = bios.map(b => avg(grp.filter(c => c.r.bio === b).map(on)));   // average technical reps first
-        const mean = avg(bioMeans);
-        const spread = bios.length > 1 ? sd(bioMeans, mean) : grp.length > 1 ? sd(grp.map(on), mean) : null;
-        out.push({ label: `${ty} (${bios.length} bio × ${grp.length} inj)`, metal: m, color: st.color[ty], dash: "solid", t, y: mean,
-          sd: spread, sdKind: bios.length > 1 ? "biological SD" : grp.length > 1 ? "technical SD" : "" });
+  panels.forEach((p, pi) => {
+    const ya = "y" + (pi ? pi + 1 : ""), multi = p.items.length > 1;
+    p.items.forEach((it, ii) => {
+      const s = sigInfo(it.key); const tag = multi ? ` · ${s.name}` : "";
+      const corr = vis.filter(r => r.signals[it.key]).map((r, ri) => {
+        const sig = r.signals[it.key], b = blankTrace(r, it.key);
+        return { r, ri, t: sig.t, y: b.y ? sig.y.map((v, i) => v - b.y[i]) : sig.y };
       });
-    }
-    if (S.showBlanks) methodRuns().filter(isBlank).forEach(b => b.metals[m] &&
-      out.push({ label: `${b.name} (raw)`, metal: m, color: css("--blank"), dash: "dash", t: b.t, y: b.metals[m], isBlank: true }));
+      const colorOf = (r, ri) => multi ? css(SLOTS[ii % 8]) : st.color[r.type];
+      const dashOf = (r, ri) => multi ? DASHES[ri % DASHES.length] : st.dash[r.name];
+      if (S.view === "runs") {
+        corr.forEach(c => out.push({ label: c.r.name, key: it.key, sig: s.name, unit: it.mode === "pct" ? "% of max" : s.unit, color: colorOf(c.r, c.ri), dash: dashOf(c.r, c.ri),
+          name: c.r.name + tag, t: c.t, y: scaleY(c.y, it), ya, pi }));
+      } else {
+        st.types.forEach((ty, ti) => {
+          const grp = corr.filter(c => c.r.type === ty); if (!grp.length) return;
+          const t = grp[0].t; const on = c => c.t === t ? c.y : interp(t, c.t, c.y);
+          const avg = arrs => t.map((_, i) => arrs.reduce((a, x) => a + x[i], 0) / arrs.length);
+          const sd = (arrs, mu) => t.map((_, i) => Math.sqrt(arrs.reduce((a, x) => a + (x[i] - mu[i]) ** 2, 0) / Math.max(1, arrs.length - 1)));
+          const bios = [...new Set(grp.map(c => c.r.bio))];
+          const bioMeans = bios.map(b => avg(grp.filter(c => c.r.bio === b).map(on)));
+          const mean = avg(bioMeans); let spread = bios.length > 1 ? sd(bioMeans, mean) : grp.length > 1 ? sd(grp.map(on), mean) : null;
+          const scaled = scaleY(mean, it);
+          const k = it.mode === "pct" ? 100 / Math.max(...mean) : it.mode === "factor" ? (+it.factor || 1) : 1;   // same factor scaleY applied
+          if (spread && k !== 1) spread = spread.map(v => Math.abs(v * k));
+          out.push({ label: `${ty} (${bios.length} bio × ${grp.length} inj)`, key: it.key, sig: s.name, unit: it.mode === "pct" ? "% of max" : s.unit,
+            color: multi ? css(SLOTS[ii % 8]) : st.color[ty], dash: multi ? DASHES[ti % DASHES.length] : "solid", name: `${ty}${tag}`, t, y: scaled, sd: spread, ya, pi });
+        });
+      }
+      if (S.showBlanks) methodRuns().filter(isBlank).forEach(b => b.signals[it.key] &&
+        out.push({ label: `${b.name} (raw)`, key: it.key, sig: s.name, unit: s.unit, color: css("--blank"), dash: "dash", name: `${b.name} (raw)${tag}`,
+          t: b.signals[it.key].t, y: scaleY(b.signals[it.key].y, it), isBlank: true, ya, pi }));
+    });
   });
   const nb = methodRuns().filter(isBlank).length, custom = vis.filter(r => r.blankUse !== "auto").length;
-  document.getElementById("blankNote").textContent = (S.blank === "off" ? "Blank subtraction off: raw CPS shown."
+  document.getElementById("blankNote").textContent = (S.blank === "off" ? "Blank subtraction off: raw signals shown."
     : !nb && !custom ? "No blank runs in this method, so nothing is subtracted."
-    : S.blank === "mean" ? `Subtracting the average of ${nb} blank run(s) from this method.`
-    : "Subtracting the blank acquired most recently before each sample.")
+    : S.blank === "mean" ? `Subtracting the average of the blank runs from each run's own method.` : "Subtracting the blank acquired most recently before each sample (same method).")
     + (custom && S.blank !== "off" ? ` ${custom} run(s) use a blank you chose in Files & samples.` : "")
-    + (S.view === "type" ? " Mean by type averages technical replicates first, then takes the mean across biological samples; the band is ±1 SD." : "");
+    + (S.view === "type" ? " Mean by type averages technical replicates first, then takes the mean across biological samples; the band is ±1 SD." : "")
+    + (S.method === "all" ? " All methods shown together on one time axis." : "")
+    + (Object.entries(S.offsets).filter(([, v]) => +v).length ? " Time offsets: " + Object.entries(S.offsets).filter(([, v]) => +v).map(([d, v]) => `${d} ${v > 0 ? "+" : ""}${v} s`).join(", ") + "." : "");
   return out;
 }
 function render() {
   if (!RUNS.length) { Plotly.purge("plot"); CURRENT = []; PEAKS = []; drawPeaks(); drawMarks(); return; }
   if (S.view === "order") return renderOrder();
-  CURRENT = computeSeries();
-  const metals = METALS.filter(m => S.metals.has(m));
+  const panels = activePanels();
+  CURRENT = computeSeries(panels);
   const ink = css("--ink"), ink2 = css("--ink-2"), grid = css("--grid"), line = css("--line"), panel = css("--panel");
-  const traces = [];
-  CURRENT.forEach((s, idx) => {
-    const ya = "y" + (metals.indexOf(s.metal) ? metals.indexOf(s.metal) + 1 : "");
-    traces.push({ type: "scattergl", mode: "lines", name: s.label, showlegend: false, x: s.t.map(tx), y: s.y, xaxis: "x", yaxis: ya,
-      line: { color: s.color, width: s.isBlank ? 1 : 1.6, dash: s.dash },
-      hovertemplate: `${s.label} · ${s.metal}<br>%{x:.3f} ${unitLbl()} · %{y:,.0f} CPS<extra></extra>` });
-  });
-  // SD bands drawn after (so curveNumber of lines == index in CURRENT)
-  CURRENT.forEach(s => { if (!s.sd) return;
-    const ya = "y" + (metals.indexOf(s.metal) ? metals.indexOf(s.metal) + 1 : ""); const xs = s.t.map(tx);
+  const traces = CURRENT.map(s => ({ type: "scattergl", mode: "lines", name: s.name, showlegend: false, x: s.t.map(tx), y: s.y, xaxis: "x", yaxis: s.ya,
+    line: { color: s.color, width: s.isBlank ? 1 : 1.6, dash: s.dash },
+    hovertemplate: `${esc(s.label)} · ${esc(s.sig)}<br>%{x:.3f} ${unitLbl()} · %{y:,.4~g} ${esc(s.unit)}<extra></extra>` }));
+  CURRENT.forEach(s => { if (!s.sd) return; const xs = s.t.map(tx);
     traces.push({ type: "scatter", mode: "lines", x: [...xs, ...xs.slice().reverse()], y: [...s.y.map((v, i) => v + s.sd[i]), ...s.y.map((v, i) => v - s.sd[i]).reverse()],
-      fill: "toself", fillcolor: s.color + "33", line: { width: 0 }, hoverinfo: "skip", showlegend: false, xaxis: "x", yaxis: ya }); });
-  const h = 1 / metals.length, gap = 0.06;
-  const layout = {
-    paper_bgcolor: panel, plot_bgcolor: panel, font: { family: css("--font"), color: ink2, size: 12 },
-    margin: { l: 70, r: 12, t: 8, b: 44 }, height: Math.max(420, 250 * metals.length + 60), showlegend: false,
-    hovermode: "closest", dragmode: "zoom", hoverlabel: { font: { family: css("--mono"), size: 12 } },
+      fill: "toself", fillcolor: s.color + "33", line: { width: 0 }, hoverinfo: "skip", showlegend: false, xaxis: "x", yaxis: s.ya }); });
+  const n = Math.max(1, panels.length), h = 1 / n, gap = Math.min(0.06, 0.3 / n);
+  const layout = { paper_bgcolor: panel, plot_bgcolor: panel, font: { family: css("--font"), color: ink2, size: 12 },
+    margin: { l: 74, r: 12, t: 8, b: 44 }, height: Math.max(420, 250 * n + 60), showlegend: false,
+    hovermode: "closest", hoverlabel: { font: { family: css("--mono"), size: 12 } },
     xaxis: { title: { text: `Retention time (${unitLbl()})` }, gridcolor: grid, linecolor: line, zeroline: false,
       showspikes: true, spikemode: "across", spikesnap: "cursor", spikecolor: ink2, spikethickness: 1, spikedash: "dot",
-      range: xRange ? xRange.map(tx) : undefined, anchor: "y" + (metals.length > 1 ? metals.length : "") },
-  };
-  metals.forEach((m, i) => {
-    const top = 1 - i * h, bottom = top - h + (i < metals.length - 1 ? gap : 0);
-    layout["yaxis" + (i ? i + 1 : "")] = { domain: [Math.max(0, bottom), top], title: { text: `${m} CPS`, font: { size: 12, color: ink } },
+      range: xRange ? xRange.map(tx) : undefined, anchor: "y" + (n > 1 ? n : "") } };
+  panels.forEach((p, i) => {
+    const top = 1 - i * h, bottom = top - h + (i < n - 1 ? gap : 0);
+    layout["yaxis" + (i ? i + 1 : "")] = { domain: [Math.max(0, bottom), top], title: { text: esc(panelTitle(p)), font: { size: 11.5, color: ink } },
       type: S.y, gridcolor: grid, linecolor: line, zerolinecolor: line, exponentformat: "SI",
       showspikes: true, spikemode: "across", spikesnap: "cursor", spikecolor: ink2, spikethickness: 1, spikedash: "dot" };
   });
-  CURRENT.forEach(s => s.ya = "y" + (metals.indexOf(s.metal) ? metals.indexOf(s.metal) + 1 : ""));
   zoomAxes(layout);
-  S.marks.forEach(mk => { const i = metals.indexOf(mk.metal); if (i < 0) return;
-    traces.push({ type: "scatter", mode: "markers", showlegend: false, hoverinfo: "skip", x: [tx(mk.t)], y: [mk.y], xaxis: "x", yaxis: "y" + (i ? i + 1 : ""),
+  S.marks.forEach(mk => { const s = CURRENT.find(c => c.label === mk.label && c.sig === mk.sig && c.ya === mk.ya); if (!s) return;
+    traces.push({ type: "scatter", mode: "markers", showlegend: false, hoverinfo: "skip", x: [tx(mk.t)], y: [mk.y], xaxis: "x", yaxis: s.ya,
       marker: { size: 10, color: panel, line: { color: ink, width: 2 } } }); });
   findAllPeaks(); traces.push(...peakMarkerTraces(s => s.ya, () => "x"));
   Plotly.react("plot", traces, layout, PLOT_CONFIG); afterDraw();
   drawPeaks(); drawMarks();
 }
 
-/* ================= run order view ================= */
+/* =====================================================================
+   RUN ORDER VIEW (bleed-over / carryover)
+   ===================================================================== */
 function windowArea(t, y, a, b) {
   const idx = []; for (let i = 0; i < t.length; i++) if (t[i] >= a && t[i] <= b) idx.push(i);
   if (idx.length < 8) return null;
@@ -760,26 +1083,23 @@ function windowArea(t, y, a, b) {
   const x0 = head.reduce((s, i) => s + t[i], 0) / k, x1 = tail.reduce((s, i) => s + t[i], 0) / k;
   const y0 = med(head.map(i => y[i])), y1 = med(tail.map(i => y[i]));
   const base = x => y0 + (y1 - y0) * (x - x0) / (x1 - x0);
-  let area = 0;
-  for (let j = 1; j < idx.length; j++) { const i = idx[j], h = idx[j - 1];
-    area += 0.5 * ((y[i] - base(t[i])) + (y[h] - base(t[h]))) * (t[i] - t[h]); }
+  let area = 0; for (let j = 1; j < idx.length; j++) { const i = idx[j], h = idx[j - 1]; area += 0.5 * ((y[i] - base(t[i])) + (y[h] - base(t[h]))) * (t[i] - t[h]); }
   return area;
 }
 function renderOrder() {
-  const metals = METALS.filter(m => S.metals.has(m));
-  const st = colorMap();
+  const panels = activePanels(), st = colorMap();
   const rows = used().filter(r => isBlank(r) || !S.hidden.has(r.name));
   const ink = css("--ink"), ink2 = css("--ink-2"), ink3 = css("--ink-3"), grid = css("--grid"), line = css("--line"),
         panel = css("--panel"), soft = css("--accent-soft"), blankC = css("--blank");
   const wa = +document.getElementById("winA").value, wb = +document.getElementById("winB").value;
-  const nR = rows.length, nC = metals.length, rowH = 1 / Math.max(1, nR), colW = 1 / nC, gx = nC > 1 ? 0.04 : 0, gy = Math.min(0.012, rowH * 0.18);
+  const nR = Math.max(1, rows.length), nC = Math.max(1, panels.length), rowH = 1 / nR, colW = 1 / nC, gx = nC > 1 ? 0.04 : 0, gy = Math.min(0.012, rowH * 0.18);
   CURRENT = []; const traces = [];
   const layout = { paper_bgcolor: panel, plot_bgcolor: panel, font: { family: css("--font"), color: ink2, size: 11 },
     margin: { l: 56, r: 10, t: 26, b: 44 }, height: 86 * nR + 80, showlegend: false, hovermode: "closest",
     hoverlabel: { font: { family: css("--mono"), size: 12 } }, shapes: [], annotations: [] };
-  metals.forEach((m, c) => layout.annotations.push({ text: `<b>${m}</b> raw CPS`, xref: "paper", yref: "paper",
+  panels.forEach((p, c) => layout.annotations.push({ text: `<b>${esc(panelTitle(p))}</b> raw`, xref: "paper", yref: "paper",
     x: c * colW + (colW - gx) / 2, y: 1, yanchor: "bottom", yshift: 6, showarrow: false, font: { size: 12, color: ink } }));
-  rows.forEach((r, ri) => metals.forEach((m, c) => {
+  rows.forEach((r, ri) => panels.forEach((p, c) => {
     const k = ri * nC + c + 1, xa = "x" + (k > 1 ? k : ""), ya = "y" + (k > 1 ? k : "");
     const top = 1 - ri * rowH, bottom = top - rowH + gy, q = used().indexOf(r) + 1;
     layout["xaxis" + (k > 1 ? k : "")] = { domain: [c * colW, (c + 1) * colW - gx], anchor: ya, matches: k > 1 ? "x" : undefined,
@@ -789,75 +1109,79 @@ function renderOrder() {
       range: xRange ? xRange.map(tx) : undefined };
     layout["yaxis" + (k > 1 ? k : "")] = { domain: [bottom, top], anchor: xa, type: S.y, gridcolor: grid, linecolor: line, zerolinecolor: line,
       nticks: 3, tickfont: { size: 9 }, exponentformat: "SI", rangemode: S.y === "log" ? undefined : "tozero" };
-    const col = isBlank(r) ? blankC : (st.color[r.type] || ink3), y = r.metals[m] || r.t.map(() => 0);
-    traces.push({ type: "scattergl", mode: "lines", x: r.t.map(tx), y, xaxis: xa, yaxis: ya, line: { color: col, width: isBlank(r) ? 1.4 : 1.2 },
-      hovertemplate: `#${q} ${r.name} · ${m}<br>%{x:.3f} ${unitLbl()} · %{y:,.0f} CPS<extra></extra>` });
-    CURRENT.push({ label: r.name, metal: m, color: col, t: r.t, y, xa, ya, isBlank: isBlank(r) });
+    p.items.forEach((it, ii) => {
+      const sig = r.signals[it.key]; if (!sig) return; const s = sigInfo(it.key);
+      const col = p.items.length > 1 ? css(SLOTS[ii % 8]) : isBlank(r) ? blankC : (st.color[r.type] || ink3), y = scaleY(sig.y, it);
+      traces.push({ type: "scattergl", mode: "lines", x: sig.t.map(tx), y, xaxis: xa, yaxis: ya, line: { color: col, width: isBlank(r) ? 1.4 : 1.2 },
+        hovertemplate: `#${q} ${esc(r.name)} · ${esc(s.name)}<br>%{x:.3f} ${unitLbl()} · %{y:,.4~g} ${esc(s.unit)}<extra></extra>` });
+      CURRENT.push({ label: r.name, key: it.key, sig: s.name, unit: it.mode === "pct" ? "% of max" : s.unit, name: `${r.name} · ${s.name}`, color: col, t: sig.t, y, xa, ya, isBlank: isBlank(r) });
+    });
     if (isBlank(r)) layout.shapes.push({ type: "rect", layer: "below", xref: xa + " domain", yref: ya + " domain", x0: 0, x1: 1, y0: 0, y1: 1, fillcolor: soft, line: { width: 0 } });
     layout.shapes.push({ type: "rect", layer: "below", xref: xa, yref: ya + " domain", x0: tx(wa), x1: tx(wb), y0: 0, y1: 1, fillcolor: grid, line: { width: 0 } });
-    if (c === 0) layout.annotations.push({ text: `#${q} · ${hhmm(r)} · <b>${esc(r.name)}</b>${isBlank(r) ? " (blank)" : ""}`,
+    if (c === 0) layout.annotations.push({ text: `#${q}${hhmm(r) ? " · " + hhmm(r) : ""} · <b>${esc(r.name)}</b>${isBlank(r) ? " (blank)" : ""}`,
       xref: xa + " domain", yref: ya + " domain", x: 0.005, y: 0.98, xanchor: "left", yanchor: "top", showarrow: false,
       font: { size: 10.5, color: ink }, bgcolor: isBlank(r) ? soft : panel, borderpad: 1 });
   }));
-  S.marks.forEach(mk => { const s = CURRENT.find(c => c.label === mk.label && c.metal === mk.metal); if (!s) return;
+  zoomAxes(layout);
+  S.marks.forEach(mk => { const s = CURRENT.find(c => c.label === mk.label && c.sig === mk.sig && c.xa === mk.xa); if (!s) return;
     traces.push({ type: "scatter", mode: "markers", hoverinfo: "skip", x: [tx(mk.t)], y: [mk.y], xaxis: s.xa, yaxis: s.ya,
       marker: { size: 9, color: panel, line: { color: ink, width: 2 } } }); });
-  zoomAxes(layout);
   document.getElementById("blankNote").textContent =
-    `All ${used().length} included runs in the order they were acquired, raw CPS (no blank subtraction), each panel on its own scale. Shaded rows are blanks; the grey band is the peak window used below.`;
+    `All ${used().length} included runs in the order they were acquired (runs without a time in the file come first), raw signals (no blank subtraction), each panel on its own scale. Shaded rows are blanks; the grey band is the peak window used below.`;
   findAllPeaks(); traces.push(...peakMarkerTraces(s => s.ya, s => s.xa));
   Plotly.react("plot", traces, layout, PLOT_CONFIG); afterDraw();
-  drawPeaks(); drawMarks(); renderCarry(metals);
+  drawPeaks(); drawMarks(); renderCarry();
 }
-function renderCarry(metals) {
-  const wa = +document.getElementById("winA").value, wb = +document.getElementById("winB").value;
+function carrySignals() { const keys = []; activePanels().forEach(p => p.items.forEach(it => !keys.includes(it.key) && keys.push(it.key))); return keys; }
+function renderCarry() {
+  const keys = carrySignals(), wa = +document.getElementById("winA").value, wb = +document.getElementById("winB").value;
   const Q = used(), rowsHtml = [];
   Q.forEach((r, i) => {
     if (!isBlank(r) || i === 0) return;
     const prev = Q[i - 1];
-    const cells = metals.map(m => {
-      const ab = r.metals[m] && windowArea(r.t, r.metals[m], wa, wb), ap = prev.metals[m] && windowArea(prev.t, prev.metals[m], wa, wb);
+    const cells = keys.map(k => {
+      const ab = r.signals[k] && windowArea(r.signals[k].t, r.signals[k].y, wa, wb), ap = prev.signals[k] && windowArea(prev.signals[k].t, prev.signals[k].y, wa, wb);
       if (ab == null || ap == null || ap <= 0) return `<td class="num">–</td>`;
       const pct = 100 * Math.max(0, ab) / ap;
-      return `<td class="num${pct >= 1 ? " hi" : ""}" title="blank ${fmtC(ab)} vs ${fmtC(ap)} CPS·s">${pct < 0.01 ? "<0.01" : pct.toFixed(2)}%</td>`;
+      return `<td class="num${pct >= 1 ? " hi" : ""}" title="blank ${fmtV(ab)} vs ${fmtV(ap)}">${pct < 0.01 ? "<0.01" : pct.toFixed(2)}%</td>`;
     }).join("");
     rowsHtml.push(`<tr><td>#${i + 1} ${esc(r.name)} <span class="note">${hhmm(r)}</span></td><td>#${i} ${esc(prev.name)}${isBlank(prev) ? " (blank)" : ""}</td>${cells}</tr>`);
   });
   document.getElementById("carryTbl").innerHTML = rowsHtml.length
-    ? `<tr><th>Blank</th><th>Injected just before</th>${metals.map(m => `<th style="text-align:right">${m}</th>`).join("")}</tr>${rowsHtml.join("")}
-       <tr><td colspan="${2 + metals.length}" class="note" style="white-space:normal;padding-top:8px">Values of 1% or more are highlighted. Negative blank areas (blank below its own baseline) count as 0%. Hover a value to see both areas.</td></tr>`
+    ? `<tr><th>Blank</th><th>Injected just before</th>${keys.map(k => `<th style="text-align:right">${esc(sigInfo(k).name)}</th>`).join("")}</tr>${rowsHtml.join("")}
+       <tr><td colspan="${2 + keys.length}" class="note" style="white-space:normal;padding-top:8px">Values of 1% or more are highlighted. Negative blank areas (blank below its own baseline) count as 0%. Hover a value to see both areas.</td></tr>`
     : `<tr><td class="empty">No blank follows another run in this batch, so carryover can't be estimated.</td></tr>`;
   const ink = css("--ink"), ink2 = css("--ink-2"), grid = css("--grid"), line = css("--line"), panel = css("--panel"), blankC = css("--blank");
-  const st = colorMap(); const n = metals.length;
+  const st = colorMap(); const n = Math.max(1, keys.length);
   const traces = [], layout = { paper_bgcolor: panel, plot_bgcolor: panel, font: { family: css("--font"), color: ink2, size: 11 },
-    margin: { l: 56, r: 10, t: 10, b: 90 }, height: 170 * n + 110, showlegend: false, hovermode: "closest",
-    hoverlabel: { font: { family: css("--mono"), size: 12 } } };
+    margin: { l: 60, r: 10, t: 10, b: 90 }, height: 170 * n + 110, showlegend: false, hovermode: "closest", hoverlabel: { font: { family: css("--mono"), size: 12 } } };
   const labels = Q.map((r, i) => `#${i + 1} ${r.name.length > 16 ? r.name.slice(0, 15) + "…" : r.name}`);
-  metals.forEach((m, j) => {
-    const k = j + 1, ya = "y" + (k > 1 ? k : "");
-    const bg = Q.map(r => { if (!r.metals[m]) return null; const v = r.metals[m].filter((_, i) => r.t[i] <= 60).sort((a, b) => a - b); return v[v.length >> 1]; });
-    traces.push({ type: "scatter", mode: "lines", x: labels, y: bg, yaxis: ya, line: { color: line, width: 1.5 }, hoverinfo: "skip" });
+  keys.forEach((k, j) => {
+    const ya = "y" + (j ? j + 1 : ""), s = sigInfo(k);
+    const bg = Q.map(r => { const g = r.signals[k]; if (!g) return null; const v = g.y.filter((_, i) => g.t[i] <= 60).sort((a, b) => a - b); return v.length ? v[v.length >> 1] : null; });
+    traces.push({ type: "scatter", mode: "lines", x: labels, y: bg, yaxis: ya, line: { color: line, width: 1.5 }, hoverinfo: "skip", connectgaps: true });
     traces.push({ type: "scatter", mode: "markers", x: labels, y: bg, yaxis: ya,
       marker: { size: 9, color: Q.map(r => isBlank(r) ? panel : (st.color[r.type] || ink2)), line: { color: Q.map(r => isBlank(r) ? blankC : panel), width: 2 } },
-      customdata: Q.map(r => [r.name, hhmm(r)]),
-      hovertemplate: `%{customdata[0]} (%{customdata[1]})<br>${m} background %{y:,.0f} CPS<extra></extra>` });
+      customdata: Q.map(r => [r.name, hhmm(r)]), hovertemplate: `%{customdata[0]} %{customdata[1]}<br>${esc(s.name)} background %{y:,.4~g} ${esc(s.unit)}<extra></extra>` });
     const top = 1 - j / n, bottom = top - 1 / n + 0.07;
-    layout["yaxis" + (k > 1 ? k : "")] = { domain: [bottom, top], title: { text: m, font: { size: 11, color: ink } }, gridcolor: grid, linecolor: line,
-      zeroline: false, rangemode: "tozero", exponentformat: "SI", tickfont: { size: 10 }, anchor: "x" };
+    layout["yaxis" + (j ? j + 1 : "")] = { domain: [bottom, top], title: { text: esc(`${s.name} (${s.unit})`), font: { size: 11, color: ink } }, gridcolor: grid, linecolor: line,
+      zeroline: false, exponentformat: "SI", tickfont: { size: 10 }, anchor: "x" };
   });
   layout.xaxis = { tickangle: -45, tickfont: { size: 9.5 }, gridcolor: grid, linecolor: line, anchor: "y" + (n > 1 ? n : "") };
   Plotly.react("bgPlot", traces, layout, { responsive: true, displaylogo: false, displayModeBar: false });
 }
 ["winA", "winB"].forEach(id => document.getElementById(id).addEventListener("change", () => S.view === "order" && render()));
 
-/* ================= cursor readout, zoom, marks, apex ================= */
+/* =====================================================================
+   CURSOR, MARKS, PEAKS
+   ===================================================================== */
 function bindPlot() {
   const el = document.getElementById("plot");
   el.on("plotly_hover", ev => { const p = ev.points[0], s = CURRENT[p.curveNumber]; if (!s) return;
     const tsec = S.unit === "min" ? p.x * 60 : p.x;
-    document.getElementById("readout").textContent = `${s.label} · ${s.metal} · t = ${fmtBoth(tsec)} · ${fmtC(p.y)} CPS`; });
+    document.getElementById("readout").textContent = `${s.label} · ${s.sig} · t = ${fmtBoth(tsec)} · ${fmtV(p.y)} ${s.unit}`; });
   el.on("plotly_click", ev => { const p = ev.points[0], s = CURRENT[p.curveNumber]; if (!s) return;
-    S.marks.push({ label: s.label, metal: s.metal, color: s.color, t: S.unit === "min" ? p.x * 60 : p.x, y: p.y }); render(); });
+    S.marks.push({ name: s.name, ya: s.ya, xa: s.xa, label: s.label, sig: s.sig, unit: s.unit, color: s.color, t: S.unit === "min" ? p.x * 60 : p.x, y: p.y }); render(); });
   el.on("plotly_relayout", ev => {
     const keys = Object.keys(ev), r0 = keys.find(k => /^xaxis\d*\.range\[0\]$/.test(k));
     if (keys.some(k => /^xaxis\d*\.autorange$/.test(k) && ev[k])) xRange = null;
@@ -866,79 +1190,11 @@ function bindPlot() {
     render();
   });
 }
-/* ---------- peak finding ---------- */
-// Local maxima of a lightly smoothed trace, kept if their prominence (height above the higher of the two
-// surrounding valleys) is at least the chosen % of the tallest feature in view. Each peak's bounds are the
-// lowest points between it and its neighbouring kept peaks (or the window edge); area and height are
-// measured on the unsmoothed trace above a straight baseline joining those bounds.
-let PEAKS = [];
-function peaksOf(s, a, b, frac) {
-  const idx = []; for (let i = 0; i < s.t.length; i++) if (s.t[i] >= a && s.t[i] <= b) idx.push(i);
-  if (idx.length < 5) return [];
-  const t = idx.map(i => s.t[i]), y = idx.map(i => s.y[i]), n = y.length;
-  const ys = y.map((_, i) => (y[Math.max(0, i - 1)] + y[i] + y[Math.min(n - 1, i + 1)]) / 3);
-  const range = Math.max(...ys) - Math.min(...ys); if (!(range > 0)) return [];
-  const cand = [];
-  for (let i = 1; i < n - 1; i++) {
-    if (!(ys[i] > ys[i - 1] && ys[i] >= ys[i + 1])) continue;
-    let L = ys[i]; for (let j = i - 1; j >= 0 && ys[j] <= ys[i]; j--) L = Math.min(L, ys[j]);
-    let R = ys[i]; for (let k = i + 1; k < n && ys[k] <= ys[i]; k++) R = Math.min(R, ys[k]);
-    if (ys[i] - Math.max(L, R) >= frac * range) cand.push(i);
-  }
-  const argmin = (lo, hi) => { let m = lo; for (let q = lo; q <= hi; q++) if (y[q] < y[m]) m = q; return m; };
-  return cand.map((ci, c) => {
-    let pk = ci; for (let q = Math.max(0, ci - 2); q <= Math.min(n - 1, ci + 2); q++) if (y[q] > y[pk]) pk = q;  // apex on raw data
-    const lo = argmin(c ? cand[c - 1] : 0, pk), hi = argmin(pk, c < cand.length - 1 ? cand[c + 1] : n - 1);
-    const base = q => y[lo] + (y[hi] - y[lo]) * (t[q] - t[lo]) / ((t[hi] - t[lo]) || 1);
-    let area = 0; for (let q = lo + 1; q <= hi; q++) area += 0.5 * ((y[q] - base(q)) + (y[q - 1] - base(q - 1))) * (t[q] - t[q - 1]);
-    const h = y[pk] - base(pk), half = base(pk) + h / 2;
-    let l = pk; while (l > lo && y[l] > half) l--;
-    let r = pk; while (r < hi && y[r] > half) r++;
-    const xl = l < pk && y[l + 1] !== y[l] ? t[l] + (half - y[l]) * (t[l + 1] - t[l]) / (y[l + 1] - y[l]) : t[l];
-    const xr = r > pk && y[r - 1] !== y[r] ? t[r - 1] + (half - y[r - 1]) * (t[r] - t[r - 1]) / (y[r] - y[r - 1]) : t[r];
-    return { label: s.label, metal: s.metal, color: s.color, t: t[pk], y: y[pk], h, area, fwhm: xr - xl, start: t[lo], end: t[hi], series: s };
-  });
-}
-function findAllPeaks() {
-  const [a, b] = xRange || [-Infinity, Infinity];
-  const frac = Math.min(0.9, Math.max(0.005, (+document.getElementById("prom").value || 5) / 100));
-  PEAKS = [];
-  CURRENT.filter(s => !s.isBlank).forEach(s => peaksOf(s, a, b, frac).forEach((p, i) => PEAKS.push({ ...p, n: i + 1 })));
-}
-function peakMarkerTraces(yaOf, xaOf) {
-  if (!S.peakMarks || !PEAKS.length) return [];
-  const groups = new Map();
-  PEAKS.forEach(p => { if (!groups.has(p.series)) groups.set(p.series, []); groups.get(p.series).push(p); });
-  return [...groups.entries()].map(([s, ps]) => ({
-    type: "scatter", mode: "markers+text", showlegend: false, x: ps.map(p => tx(p.t)), y: ps.map(p => p.y),
-    xaxis: xaOf(s) || "x", yaxis: yaOf(s) || "y", text: ps.map(p => String(p.n)), textposition: "top center",
-    textfont: { size: 10, color: css("--ink-2") }, cliponaxis: false,
-    marker: { symbol: "triangle-down", size: 8, color: s.color, line: { color: css("--panel"), width: 1 } },
-    customdata: ps.map(p => [p.n, p.t.toFixed(2), (p.t / 60).toFixed(3), fmtC(p.h), fmtC(p.area)]),
-    hovertemplate: `${esc(s.label)} · ${s.metal} · peak %{customdata[0]}<br>apex %{customdata[1]} s (%{customdata[2]} min)<br>height %{customdata[3]} · area %{customdata[4]}<extra></extra>`,
-  }));
-}
-function drawPeaks() {
-  const range = xRange ? `${fmtT(xRange[0])} – ${fmtT(xRange[1])}` : "full run";
-  const rt = `<th style="text-align:right">`;
-  document.getElementById("peakTbl").innerHTML = PEAKS.length
-    ? `<caption class="note" style="caption-side:top;text-align:left;padding-bottom:6px">Range: ${range} · ${PEAKS.length} peak(s) in ${new Set(PEAKS.map(p => p.series)).size} trace(s)</caption>
-       <tr><th>Trace</th><th>Metal</th>${rt}Peak</th>${rt}Apex (s)</th>${rt}Apex (min)</th>${rt}CPS at apex</th>${rt}Height above baseline</th>${rt}Area (CPS·s)</th>${rt}FWHM (s)</th>${rt}From–to (s)</th></tr>` +
-      PEAKS.map(p => `<tr><td><span class="dot" style="background:${p.color}"></span>${esc(p.label)}</td><td>${p.metal}</td>
-        <td class="num pk">${p.n}</td><td class="num">${p.t.toFixed(2)}</td><td class="num">${(p.t / 60).toFixed(3)}</td>
-        <td class="num">${fmtC(p.y)}</td><td class="num">${fmtC(p.h)}</td><td class="num">${fmtC(p.area)}</td>
-        <td class="num">${p.fwhm.toFixed(1)}</td><td class="num">${p.start.toFixed(1)}–${p.end.toFixed(1)}</td></tr>`).join("")
-    : `<tr><td class="empty">No peaks above the size cut-off in this range. Try a lower %.</td></tr>`;
-}
-document.getElementById("prom").addEventListener("change", render);
-document.getElementById("copyPeaks").onclick = e => copyText(["trace\tmetal\tpeak\tapex_s\tapex_min\tcps_at_apex\theight_above_baseline\tarea_cps_s\tfwhm_s\tstart_s\tend_s",
-  ...PEAKS.map(p => [p.label, p.metal, p.n, p.t.toFixed(2), (p.t / 60).toFixed(3), Math.round(p.y), Math.round(p.h), Math.round(p.area), p.fwhm.toFixed(2), p.start.toFixed(2), p.end.toFixed(2)].join("\t"))].join("\n"), e.currentTarget);
-
 function drawMarks() {
   document.getElementById("markTbl").innerHTML = S.marks.length
-    ? `<tr><th>Trace</th><th>Metal</th><th style="text-align:right">Time (s)</th><th style="text-align:right">Time (min)</th><th style="text-align:right">CPS</th><th></th></tr>` +
-      S.marks.map((r, i) => `<tr><td><span class="dot" style="background:${r.color}"></span>${esc(r.label)}</td><td>${r.metal}</td>
-        <td class="num">${r.t.toFixed(2)}</td><td class="num">${(r.t / 60).toFixed(3)}</td><td class="num">${fmtC(r.y)}</td>
+    ? `<tr><th>Trace</th><th>Signal</th><th style="text-align:right">Time (s)</th><th style="text-align:right">Time (min)</th><th style="text-align:right">Value</th><th>Unit</th><th></th></tr>` +
+      S.marks.map((r, i) => `<tr><td><span class="dot" style="background:${r.color}"></span>${esc(r.label)}</td><td>${esc(r.sig)}</td>
+        <td class="num">${r.t.toFixed(2)}</td><td class="num">${(r.t / 60).toFixed(3)}</td><td class="num">${fmtV(r.y)}</td><td>${esc(r.unit)}</td>
         <td><button class="x" data-i="${i}" aria-label="Remove mark">×</button></td></tr>`).join("")
     : `<tr><td class="empty">No marks yet. Click a point on any trace.</td></tr>`;
   document.querySelectorAll("#markTbl .x").forEach(b => b.onclick = () => { S.marks.splice(+b.dataset.i, 1); render(); });
@@ -949,41 +1205,99 @@ function copyText(txt, btn) {
         fail = () => { btn.textContent = "Copy blocked"; setTimeout(() => btn.textContent = o, 1800); };
   try { navigator.clipboard.writeText(txt).then(done, fail); } catch (e) { fail(); }
 }
-const rowsTsv = rows => ["trace\tmetal\ttime_s\ttime_min\tcps", ...rows.map(r => [r.label, r.metal, r.t.toFixed(2), (r.t / 60).toFixed(3), Math.round(r.y)].join("\t"))].join("\n");
-document.getElementById("copyMarks").onclick = e => copyText(rowsTsv(S.marks), e.currentTarget);
+document.getElementById("copyMarks").onclick = e => copyText(["trace\tsignal\ttime_s\ttime_min\tvalue\tunit",
+  ...S.marks.map(r => [r.label, r.sig, r.t.toFixed(2), (r.t / 60).toFixed(3), r.y, r.unit].join("\t"))].join("\n"), e.currentTarget);
 
-/* ================= save picture ================= */
-// Renders the current plot view (same zoom, traces and peak markers) on a white background with a
-// legend and a title describing the view. PNG at 2x for slides, SVG for editing in Illustrator/Inkscape.
+/* Peak finding: local maxima of a lightly smoothed trace, kept if their prominence (height above the higher
+   of the two surrounding valleys) is at least the chosen % of the tallest feature in view. Bounds are the lowest
+   points between neighbouring kept peaks (or the window edge); area and height are measured on the unsmoothed
+   trace above a straight baseline joining those bounds. */
+let PEAKS = [];
+function peaksOf(s, a, b, frac) {
+  const idx = []; for (let i = 0; i < s.t.length; i++) if (s.t[i] >= a && s.t[i] <= b && isFinite(s.y[i])) idx.push(i);
+  if (idx.length < 5) return [];
+  const t = idx.map(i => s.t[i]), y = idx.map(i => s.y[i]), n = y.length;
+  const w = Math.max(1, Math.round(n / 600));  // smoothing half-width scales with point density
+  const ys = y.map((_, i) => { let sum = 0, c = 0; for (let j = Math.max(0, i - w); j <= Math.min(n - 1, i + w); j++) { sum += y[j]; c++; } return sum / c; });
+  const range = Math.max(...ys) - Math.min(...ys); if (!(range > 0)) return [];
+  const cand = [];
+  for (let i = 1; i < n - 1; i++) {
+    if (!(ys[i] > ys[i - 1] && ys[i] >= ys[i + 1])) continue;
+    let L = ys[i]; for (let j = i - 1; j >= 0 && ys[j] <= ys[i]; j--) L = Math.min(L, ys[j]);
+    let R = ys[i]; for (let k = i + 1; k < n && ys[k] <= ys[i]; k++) R = Math.min(R, ys[k]);
+    if (ys[i] - Math.max(L, R) >= frac * range) cand.push(i);
+  }
+  const argmin = (lo, hi) => { let m = lo; for (let q = lo; q <= hi; q++) if (ys[q] < ys[m]) m = q; return m; };
+  return cand.map((ci, c) => {
+    let pk = ci; for (let q = Math.max(0, ci - 2 * w); q <= Math.min(n - 1, ci + 2 * w); q++) if (y[q] > y[pk]) pk = q;
+    const lo = argmin(c ? cand[c - 1] : 0, ci), hi = argmin(ci, c < cand.length - 1 ? cand[c + 1] : n - 1);
+    const base = q => y[lo] + (y[hi] - y[lo]) * (t[q] - t[lo]) / ((t[hi] - t[lo]) || 1);
+    let area = 0; for (let q = lo + 1; q <= hi; q++) area += 0.5 * ((y[q] - base(q)) + (y[q - 1] - base(q - 1))) * (t[q] - t[q - 1]);
+    const h = y[pk] - base(pk), half = base(pk) + h / 2;
+    let l = pk; while (l > lo && ys[l] > half) l--;
+    let r = pk; while (r < hi && ys[r] > half) r++;
+    const xl = l < pk && ys[l + 1] !== ys[l] ? t[l] + (half - ys[l]) * (t[l + 1] - t[l]) / (ys[l + 1] - ys[l]) : t[l];
+    const xr = r > pk && ys[r - 1] !== ys[r] ? t[r - 1] + (half - ys[r - 1]) * (t[r] - t[r - 1]) / (ys[r] - ys[r - 1]) : t[r];
+    return { label: s.label, sig: s.sig, unit: s.unit, color: s.color, t: t[pk], y: y[pk], h, area, fwhm: xr - xl, start: t[lo], end: t[hi], series: s };
+  });
+}
+function findAllPeaks() {
+  const [a, b] = xRange || [-Infinity, Infinity];
+  const frac = Math.min(0.9, Math.max(0.005, (+document.getElementById("prom").value || 5) / 100));
+  PEAKS = []; CURRENT.filter(s => !s.isBlank).forEach(s => peaksOf(s, a, b, frac).forEach((p, i) => PEAKS.push({ ...p, n: i + 1 })));
+}
+function peakMarkerTraces(yaOf, xaOf) {
+  if (!S.peakMarks || !PEAKS.length) return [];
+  const groups = new Map(); PEAKS.forEach(p => { if (!groups.has(p.series)) groups.set(p.series, []); groups.get(p.series).push(p); });
+  return [...groups.entries()].map(([s, ps]) => ({
+    type: "scatter", mode: "markers+text", showlegend: false, x: ps.map(p => tx(p.t)), y: ps.map(p => p.y),
+    xaxis: xaOf(s) || "x", yaxis: yaOf(s) || "y", text: ps.map(p => String(p.n)), textposition: "top center",
+    textfont: { size: 10, color: css("--ink-2") }, cliponaxis: false,
+    marker: { symbol: "triangle-down", size: 8, color: s.color, line: { color: css("--panel"), width: 1 } },
+    customdata: ps.map(p => [p.n, p.t.toFixed(2), (p.t / 60).toFixed(3), fmtV(p.h), fmtV(p.area)]),
+    hovertemplate: `${esc(s.label)} · ${esc(s.sig)} · peak %{customdata[0]}<br>apex %{customdata[1]} s (%{customdata[2]} min)<br>height %{customdata[3]} · area %{customdata[4]}<extra></extra>` }));
+}
+function drawPeaks() {
+  const range = xRange ? `${fmtT(xRange[0])} – ${fmtT(xRange[1])}` : "full run", rt = `<th style="text-align:right">`;
+  document.getElementById("peakTbl").innerHTML = PEAKS.length
+    ? `<caption class="note" style="caption-side:top;text-align:left;padding-bottom:6px">Range: ${range} · ${PEAKS.length} peak(s) in ${new Set(PEAKS.map(p => p.series)).size} trace(s)</caption>
+       <tr><th>Trace</th><th>Signal</th>${rt}Peak</th>${rt}Apex (s)</th>${rt}Apex (min)</th>${rt}At apex</th>${rt}Height above baseline</th>${rt}Area (×s)</th>${rt}FWHM (s)</th>${rt}From–to (s)</th><th>Unit</th></tr>` +
+      PEAKS.map(p => `<tr><td><span class="dot" style="background:${p.color}"></span>${esc(p.label)}</td><td>${esc(p.sig)}</td>
+        <td class="num pk">${p.n}</td><td class="num">${p.t.toFixed(2)}</td><td class="num">${(p.t / 60).toFixed(3)}</td>
+        <td class="num">${fmtV(p.y)}</td><td class="num">${fmtV(p.h)}</td><td class="num">${fmtV(p.area)}</td>
+        <td class="num">${p.fwhm.toFixed(1)}</td><td class="num">${p.start.toFixed(1)}–${p.end.toFixed(1)}</td><td>${esc(p.unit)}</td></tr>`).join("")
+    : `<tr><td class="empty">No peaks above the size cut-off in this range. Try a lower %.</td></tr>`;
+}
+document.getElementById("prom").addEventListener("change", render);
+const peakRows = () => PEAKS.map(p => [p.label, p.sig, p.n, p.t.toFixed(2), (p.t / 60).toFixed(3), +p.y.toPrecision(6), +p.h.toPrecision(6), +p.area.toPrecision(6), p.fwhm.toFixed(2), p.start.toFixed(2), p.end.toFixed(2), p.unit]);
+const PEAK_HEAD = ["trace", "signal", "peak", "apex_s", "apex_min", "value_at_apex", "height_above_baseline", "area_x_s", "fwhm_s", "start_s", "end_s", "unit"];
+document.getElementById("copyPeaks").onclick = e => copyText([PEAK_HEAD.join("\t"), ...peakRows().map(r => r.join("\t"))].join("\n"), e.currentTarget);
+
+/* =====================================================================
+   SAVE PICTURE + FILE SAVING
+   ===================================================================== */
 let picFmt = "png";
 function viewTitle() {
-  const metals = METALS.filter(m => S.metals.has(m)).join(", ");
+  const sigs = activePanels().map(panelTitle).join(" | ");
   const what = S.view === "order" ? "run order (raw)" : S.view === "type" ? "mean by type" : "each run";
   const blank = S.view === "order" ? "" : S.blank === "off" ? " · no blank subtraction" : S.blank === "mean" ? " · minus mean blank" : " · minus nearest prior blank";
-  return `${LABEL} · ${metals} · ${what}${S.view === "order" ? "" : ` · ${S.method} s method`}${blank}`;
+  return `${LABEL} · ${sigs} · ${what}${S.view === "order" ? "" : S.method === "all" ? " · all methods" : ` · ${S.method} s method`}${blank}`;
 }
 async function makePicture(fmt) {
   const gd = document.getElementById("plot"); if (!gd.data || !gd.data.length) return null;
   const seen = new Set(), legend = S.view !== "order";
-  const data = gd.data.map(tr => {
-    const c = { ...tr };
-    c.showlegend = legend && tr.mode === "lines" && !!tr.name && !tr.fill && !seen.has(tr.name);
-    if (c.showlegend) seen.add(tr.name);
-    if (c.textfont) c.textfont = { ...c.textfont, color: "#4c5562" };
-    return c;
-  });
+  const data = gd.data.map(tr => { const c = { ...tr };
+    c.showlegend = legend && tr.mode === "lines" && !!tr.name && !tr.fill && !seen.has(tr.name); if (c.showlegend) seen.add(tr.name);
+    if (c.textfont) c.textfont = { ...c.textfont, color: "#4c5562" }; return c; });
   const W = Math.max(900, gd.offsetWidth), H = gd._fullLayout.height;
-  const lay = JSON.parse(JSON.stringify(gd.layout));
-  const panel = css("--panel"), soft = css("--accent-soft"), grid = css("--grid");
-  Object.assign(lay, { paper_bgcolor: "#ffffff", plot_bgcolor: "#ffffff", showlegend: legend,
-    width: W + (legend ? 220 : 0), height: H + 40,
+  const lay = JSON.parse(JSON.stringify(gd.layout)); const panel = css("--panel"), soft = css("--accent-soft"), grid = css("--grid");
+  Object.assign(lay, { paper_bgcolor: "#ffffff", plot_bgcolor: "#ffffff", showlegend: legend, width: W + (legend ? 240 : 0), height: H + 40,
     title: { text: esc(viewTitle()), x: 0.01, xanchor: "left", font: { size: 13, color: "#14171c" } },
-    margin: { ...(lay.margin || {}), t: ((lay.margin && lay.margin.t) || 8) + 40, r: legend ? 230 : 12 },
+    margin: { ...(lay.margin || {}), t: ((lay.margin && lay.margin.t) || 8) + 40, r: legend ? 250 : 12 },
     legend: { x: 1.01, xanchor: "left", y: 1, font: { size: 11, color: "#14171c" } } });
   lay.font = { ...(lay.font || {}), color: "#3a414c" };
   Object.keys(lay).filter(k => /^[xy]axis\d*$/.test(k)).forEach(k => {
-    const ax = lay[k], fa = gd._fullLayout[k];
-    if (fa && fa.range) { ax.range = fa.range.slice(); ax.autorange = false; }
+    const ax = lay[k], fa = gd._fullLayout[k]; if (fa && fa.range) { ax.range = fa.range.slice(); ax.autorange = false; }
     Object.assign(ax, { gridcolor: "#eceef2", linecolor: "#c9ced6", zerolinecolor: "#c9ced6", spikecolor: "#4c5562" });
     if (ax.title && typeof ax.title === "object") ax.title.font = { ...(ax.title.font || {}), color: "#14171c" };
   });
@@ -994,10 +1308,8 @@ async function makePicture(fmt) {
 }
 function buildPicFmt() {
   const el = document.getElementById("picFmt"); el.innerHTML = "";
-  [["png", "PNG"], ["svg", "SVG"]].forEach(([val, label]) => {
-    const b = document.createElement("button"); b.type = "button"; b.textContent = label;
-    b.setAttribute("aria-pressed", picFmt === val); b.onclick = () => { picFmt = val; showPicture(); }; el.appendChild(b);
-  });
+  [["png", "PNG"], ["svg", "SVG"]].forEach(([val, label]) => { const b = document.createElement("button"); b.type = "button"; b.textContent = label;
+    b.setAttribute("aria-pressed", picFmt === val); b.onclick = () => { picFmt = val; showPicture(); }; el.appendChild(b); });
 }
 async function showPicture() {
   const btn = document.getElementById("savePic"), o = "Save picture"; btn.textContent = "Rendering…";
@@ -1007,20 +1319,34 @@ async function showPicture() {
     document.getElementById("picImg").src = pic.url;
     const dl = document.getElementById("picDownload"); dl.href = pic.url; dl.download = fname;
     document.getElementById("picInfo").textContent = `${fname} · ${picFmt === "png" ? `${pic.w * 2} × ${pic.h * 2} px` : "vector, editable in Illustrator or Inkscape"}`;
-    buildPicFmt();
-    document.getElementById("picDlg").hidden = document.getElementById("picScrim").hidden = false;
-    document.getElementById("picClose").focus();
-    btn.textContent = o;
+    buildPicFmt(); document.getElementById("picDlg").hidden = document.getElementById("picScrim").hidden = false;
+    document.getElementById("picClose").focus(); btn.textContent = o;
   } catch (e) { btn.textContent = "Couldn't render"; setTimeout(() => btn.textContent = o, 1800); }
 }
-/* file saving: inside Claude's viewer use the downloads capability (viewer confirms); opened as a local file, a normal link */
-let DL = null;
-(async () => { try { if (window.claude && window.claude.use) DL = await window.claude.use("downloads"); } catch (e) { DL = null; } })();
+function closePicture() { document.getElementById("picDlg").hidden = document.getElementById("picScrim").hidden = true; document.getElementById("savePic").focus(); }
+document.getElementById("savePic").onclick = showPicture;
+document.getElementById("picClose").onclick = closePicture;
+document.getElementById("picScrim").onclick = closePicture;
+document.addEventListener("keydown", e => {
+  if (e.key !== "Escape") return;
+  if (!document.getElementById("picDlg").hidden) closePicture(); else if (!imp.hidden) closeImport(); else if (!sheet.hidden) closeInfo();
+});
 function dataUrlToBlob(url) {
   const [head, body] = url.split(","), type = (head.match(/^data:([^;,]+)/) || [])[1] || "application/octet-stream";
   if (/;base64$/.test(head)) { const bin = atob(body), b = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) b[i] = bin.charCodeAt(i); return new Blob([b], { type }); }
   return new Blob([decodeURIComponent(body)], { type });
 }
+document.getElementById("picCopy").onclick = async e => {
+  const btn = e.currentTarget, o = "Copy image";
+  try {
+    const url = picFmt === "png" ? document.getElementById("picImg").src : (await makePicture("png")).url;
+    await navigator.clipboard.write([new ClipboardItem({ "image/png": dataUrlToBlob(url) })]); btn.textContent = "Copied";
+  } catch (err) { btn.textContent = "Copy blocked: right-click the picture"; }
+  setTimeout(() => btn.textContent = o, 2200);
+};
+/* inside Claude's viewer use the downloads capability (viewer confirms); opened as a local file, a normal link */
+let DL = null;
+(async () => { try { if (window.claude && window.claude.use) DL = await window.claude.use("downloads"); } catch (e) { DL = null; } })();
 async function saveFile(filename, blob, btn) {
   const o = btn.textContent, say = (t, ms = 2200) => { btn.textContent = t; setTimeout(() => btn.textContent = o, ms); };
   if (DL) {
@@ -1037,38 +1363,26 @@ document.getElementById("picDownload").addEventListener("click", e => {
 });
 document.getElementById("csvPeaks").onclick = e => {
   const q = v => /[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v);
-  const csv = ["trace,metal,peak,apex_s,apex_min,cps_at_apex,height_above_baseline,area_cps_s,fwhm_s,start_s,end_s",
-    ...PEAKS.map(p => [p.label, p.metal, p.n, p.t.toFixed(2), (p.t / 60).toFixed(3), Math.round(p.y), Math.round(p.h), Math.round(p.area), p.fwhm.toFixed(2), p.start.toFixed(2), p.end.toFixed(2)].map(q).join(","))].join("\n");
-  const fname = (LABEL + "_peaks").replace(/[^\w.-]+/g, "_").replace(/_+/g, "_") + ".csv";
-  saveFile(fname, new Blob([csv], { type: "text/csv" }), e.currentTarget);
-};
-function closePicture() { document.getElementById("picDlg").hidden = document.getElementById("picScrim").hidden = true; document.getElementById("savePic").focus(); }
-document.getElementById("savePic").onclick = showPicture;
-document.getElementById("picClose").onclick = closePicture;
-document.getElementById("picScrim").onclick = closePicture;
-document.addEventListener("keydown", e => { if (e.key === "Escape" && !document.getElementById("picDlg").hidden) closePicture(); });
-document.getElementById("picCopy").onclick = async e => {
-  const btn = e.currentTarget, o = "Copy image";
-  try {
-    const url = picFmt === "png" ? document.getElementById("picImg").src : (await makePicture("png")).url;  // clipboard takes PNG
-    const bin = atob(url.split(",")[1]), bytes = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-    const blob = new Blob([bytes], { type: "image/png" });
-    await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
-    btn.textContent = "Copied";
-  } catch (err) { btn.textContent = "Copy blocked: right-click the picture"; }
-  setTimeout(() => btn.textContent = o, 2200);
+  const csv = [PEAK_HEAD.join(","), ...peakRows().map(r => r.map(q).join(","))].join("\n");
+  saveFile((LABEL + "_peaks").replace(/[^\w.-]+/g, "_").replace(/_+/g, "_") + ".csv", new Blob([csv], { type: "text/csv" }), e.currentTarget);
 };
 
-/* ================= theme + boot ================= */
-const rerender = () => { if (!RUNS.length) return; buildChips(); render(); };
+/* =====================================================================
+   THEME + BOOT
+   ===================================================================== */
+const rerender = () => { if (!RUNS.length) return; buildChips(); buildPanels(); render(); };
 matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", rerender);
 new MutationObserver(rerender).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+let EMBEDDED_BOOT = false;
 function boot() {
   Plotly.newPlot("plot", [], {}, { displaylogo: false }); bindPlot();
-  if (EMBEDDED) { LABEL = EMBEDDED.label; EDITS = store.get(editKey(), {}); ingest(EMBEDDED.files, true).then(() => setStatus(`${RUNS.length} runs loaded with the page.`)); }
-  else { LABEL = "Your files"; finishLoad(); mgr.hidden = false; mgrBtn.setAttribute("aria-expanded", "true"); buildManager();
-    document.getElementById("readout").textContent = "Open Files & samples and use “Add files…” to load the CSV exports from one batch (select them all at once)."; }
+  if (EMBEDDED) {
+    LABEL = EMBEDDED.label; loadEdits(); EMBEDDED_BOOT = true;
+    ingest(EMBEDDED.files, true).then(() => { EMBEDDED_BOOT = false; FILES.forEach(f => f.origRun = f.origRun || f.run); setStatus(`${FILES.length} files loaded with the page.`); });
+  } else {
+    LABEL = "Your files"; loadEdits(); finishLoad(); mgr.hidden = false; mgrBtn.setAttribute("aria-expanded", "true"); buildManager();
+    document.getElementById("readout").textContent = "Open Files & samples and use “Add files…” to load the exports from one batch (select them all at once).";
+  }
 }
 if (window.Plotly) boot(); else window.addEventListener("load", boot);
 </script>
