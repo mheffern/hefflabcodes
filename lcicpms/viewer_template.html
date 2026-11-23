@@ -199,6 +199,7 @@ dl.kv dd { margin: 0; overflow-wrap: anywhere; }
         <div class="ctl"><label class="lbl" for="prom">Min. peak size (% of tallest)</label><input id="prom" type="number" class="in num-in" min="0.5" max="90" step="0.5" value="5"></div>
         <div class="ctl"><span class="lbl">Peaks on plot</span><div class="seg" id="peakMarkSeg"></div></div>
         <button class="btn" id="copyPeaks">Copy table</button>
+        <button class="btn" id="csvPeaks">Download CSV</button>
       </div>
     </div>
     <div class="tbl" style="margin-top:10px"><table id="peakTbl"></table></div>
@@ -225,7 +226,7 @@ dl.kv dd { margin: 0; overflow-wrap: anywhere; }
     </div>
     <span class="note" id="picInfo"></span>
   </div>
-  <p class="note" style="margin:8px 0">If Download does nothing (downloads are blocked inside Claude's page viewer), right-click the picture and choose <b>Save image as…</b>, or long-press it on a phone. <b>Copy image</b> pastes straight into PowerPoint or a doc.</p>
+  <p class="note" style="margin:8px 0">You can also right-click the picture and choose <b>Save image as…</b>, or long-press it on a phone. <b>Copy image</b> pastes straight into PowerPoint or a doc.</p>
   <div class="picwrap"><img id="picImg" alt="Exported chromatogram view"></div>
 </div>
 <aside class="sheet" id="sheet" hidden role="dialog" aria-modal="true" aria-labelledby="sheetTitle"></aside>
@@ -1012,6 +1013,35 @@ async function showPicture() {
     btn.textContent = o;
   } catch (e) { btn.textContent = "Couldn't render"; setTimeout(() => btn.textContent = o, 1800); }
 }
+/* file saving: inside Claude's viewer use the downloads capability (viewer confirms); opened as a local file, a normal link */
+let DL = null;
+(async () => { try { if (window.claude && window.claude.use) DL = await window.claude.use("downloads"); } catch (e) { DL = null; } })();
+function dataUrlToBlob(url) {
+  const [head, body] = url.split(","), type = (head.match(/^data:([^;,]+)/) || [])[1] || "application/octet-stream";
+  if (/;base64$/.test(head)) { const bin = atob(body), b = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) b[i] = bin.charCodeAt(i); return new Blob([b], { type }); }
+  return new Blob([decodeURIComponent(body)], { type });
+}
+async function saveFile(filename, blob, btn) {
+  const o = btn.textContent, say = (t, ms = 2200) => { btn.textContent = t; setTimeout(() => btn.textContent = o, ms); };
+  if (DL) {
+    try { await DL.save({ filename, data: blob }); say("Saved"); }
+    catch (err) { if (err && err.code === "declined") return; say(err && err.code === "rate_limited" ? "Busy, try again" : "Saving unavailable here", 2800); }
+    return;
+  }
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+document.getElementById("picDownload").addEventListener("click", e => {
+  e.preventDefault(); const a = e.currentTarget; if (!a.href || a.getAttribute("href") === "#") return;
+  saveFile(a.download, dataUrlToBlob(a.href), a);
+});
+document.getElementById("csvPeaks").onclick = e => {
+  const q = v => /[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v);
+  const csv = ["trace,metal,peak,apex_s,apex_min,cps_at_apex,height_above_baseline,area_cps_s,fwhm_s,start_s,end_s",
+    ...PEAKS.map(p => [p.label, p.metal, p.n, p.t.toFixed(2), (p.t / 60).toFixed(3), Math.round(p.y), Math.round(p.h), Math.round(p.area), p.fwhm.toFixed(2), p.start.toFixed(2), p.end.toFixed(2)].map(q).join(","))].join("\n");
+  const fname = (LABEL + "_peaks").replace(/[^\w.-]+/g, "_").replace(/_+/g, "_") + ".csv";
+  saveFile(fname, new Blob([csv], { type: "text/csv" }), e.currentTarget);
+};
 function closePicture() { document.getElementById("picDlg").hidden = document.getElementById("picScrim").hidden = true; document.getElementById("savePic").focus(); }
 document.getElementById("savePic").onclick = showPicture;
 document.getElementById("picClose").onclick = closePicture;
